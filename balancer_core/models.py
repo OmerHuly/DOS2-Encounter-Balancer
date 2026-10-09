@@ -124,9 +124,10 @@ class EnemyStats:
     memory: int = 10
     wits: int = 10
 
-    # Combat Abilities
+    # Combat Abilities & Defenses
     combat_abilities: Dict[str, int] = field(default_factory=dict)
     talents: List[str] = field(default_factory=list)
+    resistances: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -143,6 +144,23 @@ class NPC:
     ai_tactics: str = ""
     gm_notes: str = ""
     gm_template_id: str = ""  # Exact in-engine template ID in GM mode
+    defense_theme: str = ""   # Descriptive defense profile (e.g. Ironclad, Arcane, etc.)
+
+    @property
+    def format_resistances(self) -> str:
+        """Human-readable representation of elemental resistances and vulnerabilities."""
+        if not self.stats.resistances:
+            return "Neutral (All 0%)"
+        parts = []
+        for elem, val in sorted(self.stats.resistances.items()):
+            sign = "+" if val > 0 else ""
+            if val < 0:
+                parts.append(f"{elem} {sign}{val}% [Vulnerable]")
+            elif val >= 100:
+                parts.append(f"{elem} {sign}{val}% [Immune/Heals]")
+            else:
+                parts.append(f"{elem} {sign}{val}%")
+        return ", ".join(parts)
 
     @property
     def total_ehp(self) -> int:
@@ -196,3 +214,5 @@ class Encounter:
     tactical_terrain: str = ""
     analysis: Optional[EncounterBalanceAnalysis] = None
     selected_race: Optional[Race] = None
+    minion_count: Optional[int] = None
+    boss_name: Optional[str] = None

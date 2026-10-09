@@ -39,6 +39,9 @@ from balancer_core import (
     generate_encounter,
     format_encounter_terminal,
     export_encounter_to_markdown,
+    get_all_boss_templates,
+    search_templates,
+    find_template_by_name,
 )
 
 
@@ -143,43 +146,160 @@ def interactive_mode():
     )
     selected_enc_type = next(item[1] for item in enc_options if item[0] == enc_type_choice)
 
-    # 5. Faction / Theme
-    faction_options = [
-        ("Random / Mixed Factions", Faction.ANY),
-        (Faction.MAGISTERS.value, Faction.MAGISTERS),
-        (Faction.VOIDWOKEN.value, Faction.VOIDWOKEN),
-        (Faction.UNDEAD.value, Faction.UNDEAD),
-        (Faction.BANDITS.value, Faction.BANDITS),
-        (Faction.BEASTS.value, Faction.BEASTS),
-        (Faction.DEMONS.value, Faction.DEMONS),
-        (Faction.AUTOMATONS.value, Faction.AUTOMATONS),
-    ]
-    faction_choice = prompt_choice(
-        "► Select Thematic Enemy Faction",
-        [opt[0] for opt in faction_options],
-        default_index=0
-    )
-    selected_faction = next(item[1] for item in faction_options if item[0] == faction_choice)
+    # 4b. Boss Encounter Specific Tuning
+    selected_minion_count = None
+    selected_boss_template = None
+    selected_defense_profile = "auto"
+    if selected_enc_type == EncounterType.BOSS:
+        print("\n" + "─" * 60)
+        print("  👑 BOSS ENCOUNTER CONFIGURATION")
+        print("─" * 60)
+        print("Specify the number of minions accompanying the boss (0 to 5):")
+        print("  • 0 Minions: Epic Solo Boss duel (boss receives Solo Overlord HP/armor/AP scaling)")
+        print("  • 1-2 Minions: Small squad (Boss + Lieutenant / Guard)")
+        print("  • 3 Minions: Standard balanced boss squad")
+        print("  • 4-5 Minions: Boss with minion swarm (boss & minions scaled down for AP balance)")
+        default_minions = 2 if is_lone_wolf else 3
+        selected_minion_count = prompt_int(
+            "► How many minions should accompany the boss? [0-5]",
+            default=default_minions,
+            min_val=0,
+            max_val=5
+        )
 
-    # 6. Single Race Filter (Optional)
-    race_options = [
-        ("Any / Multi-racial (Default)", None),
-        ("Human Only", Race.HUMAN),
-        ("Elf Only", Race.ELF),
-        ("Dwarf Only", Race.DWARF),
-        ("Lizard Only", Race.LIZARD),
-        ("Undead (All Undead Variants)", Race.UNDEAD),
-        ("Undead Dwarf Only", Race.UNDEAD_DWARF),
-        ("Undead Elf Only", Race.UNDEAD_ELF),
-        ("Undead Lizard Only", Race.UNDEAD_LIZARD),
-        ("Undead Human Only", Race.UNDEAD_HUMAN),
-    ]
-    race_choice = prompt_choice(
-        "► Restrict Encounter to a Single Enemy Race?",
-        [opt[0] for opt in race_options],
-        default_index=0
+        boss_selection_modes = [
+            "Random / Thematic Boss for Selected Faction (Default)",
+            "Select from Iconic Bestiary Bosses (Trolls, Titans, Overlords, etc.)",
+            "Search Bestiary by keyword (e.g. 'Troll', 'Spider', 'Magister')",
+            "Forcefully designate / create a custom Boss (e.g. 'Cave Troll Chieftain')",
+        ]
+        b_choice = prompt_choice("► Select Boss NPC", boss_selection_modes, default_index=0)
+        
+        if b_choice == boss_selection_modes[1]:
+            boss_list = get_all_boss_templates()
+            boss_options = [f"{b.name} ({b.faction.value} | {b.race.value})" for b in boss_list]
+            selected_boss_opt = prompt_choice("► Choose Boss from Bestiary", boss_options, default_index=0)
+            selected_boss_template = boss_list[boss_options.index(selected_boss_opt)]
+        elif b_choice == boss_selection_modes[2]:
+            keyword = input("► Enter search term for Boss (e.g. 'troll'): ").strip()
+            matches = search_templates(keyword)
+            if matches:
+                match_options = [f"{m.name} ({m.faction.value} | {m.race.value})" for m in matches]
+                chosen_match = prompt_choice(f"► Found {len(matches)} matching NPCs. Select one as Boss", match_options, default_index=0)
+                selected_boss_template = matches[match_options.index(chosen_match)]
+            else:
+                print(f"  [!] No existing templates matched '{keyword}'. Will forcefully create custom Boss '{keyword}'.")
+                selected_boss_template = keyword
+        elif b_choice == boss_selection_modes[3]:
+            custom_name = input("► Enter custom Boss NPC name: ").strip()
+            if custom_name:
+                selected_boss_template = custom_name
+
+        defense_options = [
+            ("Thematic Auto-Detect (Authentic bestiary resistances & weaknesses)", "auto"),
+            ("Balanced (Standard 1:1 Physical & Magic Armor, no vulnerabilities)", "balanced"),
+            ("Ironclad Juggernaut (High Phys Armor / Low Magic Armor / Air Weakness)", "ironclad"),
+            ("Arcane Ward / Spellweaver (High Magic Armor / Low Phys Armor / Phys Weakness)", "arcane"),
+            ("Volcanic / Fire-Forged (Fire Absorption / Water & Cryo Weakness)", "pyro"),
+            ("Glacial Frost-Bound (Water & Air Resistant / Fire Weakness)", "cryo"),
+            ("Venomous / Undead (Poison Absorption / Fire Weakness)", "venom"),
+            ("Storm Conduit (Air Immune / Earth Weakness)", "storm"),
+            ("Troll Hide (Massive Phys Armor / Earth Res / Fire Weakness suppresses regen)", "troll"),
+        ]
+        def_choice = prompt_choice("► Defensive & Elemental Weakness Profile", [opt[0] for opt in defense_options], default_index=0)
+        selected_defense_profile = next(item[1] for item in defense_options if item[0] == def_choice)
+
+    # Check if Faction and Race selection can be skipped:
+    # If the GM selected a Boss Encounter with 0 minions (Solo Boss duel) and specified a Boss NPC,
+    # the entire encounter is determined by that Boss NPC alone (Faction and Race are inherent).
+    skip_faction_race = (
+        selected_enc_type == EncounterType.BOSS
+        and selected_minion_count == 0
+        and selected_boss_template is not None
     )
-    selected_race = next(item[1] for item in race_options if item[0] == race_choice)
+
+    if skip_faction_race:
+        boss_tpl = None
+        if hasattr(selected_boss_template, "faction"):
+            boss_tpl = selected_boss_template
+        else:
+            boss_tpl = find_template_by_name(str(selected_boss_template))
+
+        if boss_tpl:
+            selected_faction = boss_tpl.faction
+            selected_race = boss_tpl.race
+            boss_name = boss_tpl.name
+        else:
+            selected_faction = Faction.ANY
+            selected_race = None
+            boss_name = str(selected_boss_template)
+
+        faction_desc = selected_faction.value if selected_faction != Faction.ANY else "Thematic"
+        race_desc = selected_race.value if selected_race else "Default"
+        print(f"\n[✓] Solo Boss duel configured for '{boss_name}' ({faction_desc} | {race_desc}).")
+        print("    Skipping Faction & Race selection (encounter consists solely of the designated Boss NPC).")
+    else:
+        # Resolve boss template if one was chosen for minion faction defaulting
+        boss_tpl = None
+        if selected_boss_template is not None:
+            if hasattr(selected_boss_template, "faction"):
+                boss_tpl = selected_boss_template
+            else:
+                boss_tpl = find_template_by_name(str(selected_boss_template))
+
+        # 5. Faction / Theme
+        prompt_faction_title = "► Select Thematic Enemy Faction"
+        if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
+            prompt_faction_title = "► Select Minion Faction / Theme"
+
+        faction_options = [
+            ("Random / Mixed Factions", Faction.ANY),
+            (Faction.MAGISTERS.value, Faction.MAGISTERS),
+            (Faction.VOIDWOKEN.value, Faction.VOIDWOKEN),
+            (Faction.UNDEAD.value, Faction.UNDEAD),
+            (Faction.BANDITS.value, Faction.BANDITS),
+            (Faction.BEASTS.value, Faction.BEASTS),
+            (Faction.DEMONS.value, Faction.DEMONS),
+            (Faction.AUTOMATONS.value, Faction.AUTOMATONS),
+        ]
+
+        default_fac_idx = 0
+        if boss_tpl and boss_tpl.faction != Faction.ANY:
+            for idx, opt in enumerate(faction_options):
+                if opt[1] == boss_tpl.faction:
+                    default_fac_idx = idx
+                    break
+
+        faction_choice = prompt_choice(
+            prompt_faction_title,
+            [opt[0] for opt in faction_options],
+            default_index=default_fac_idx
+        )
+        selected_faction = next(item[1] for item in faction_options if item[0] == faction_choice)
+
+        # 6. Single Race Filter (Optional)
+        prompt_race_title = "► Restrict Encounter to a Single Enemy Race?"
+        if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
+            prompt_race_title = "► Restrict Minions to a Single Enemy Race?"
+
+        race_options = [
+            ("Any / Multi-racial (Default)", None),
+            ("Human Only", Race.HUMAN),
+            ("Elf Only", Race.ELF),
+            ("Dwarf Only", Race.DWARF),
+            ("Lizard Only", Race.LIZARD),
+            ("Undead (All Undead Variants)", Race.UNDEAD),
+            ("Undead Dwarf Only", Race.UNDEAD_DWARF),
+            ("Undead Elf Only", Race.UNDEAD_ELF),
+            ("Undead Lizard Only", Race.UNDEAD_LIZARD),
+            ("Undead Human Only", Race.UNDEAD_HUMAN),
+        ]
+        race_choice = prompt_choice(
+            prompt_race_title,
+            [opt[0] for opt in race_options],
+            default_index=0
+        )
+        selected_race = next(item[1] for item in race_options if item[0] == race_choice)
 
     party_cfg = PartyConfig(
         level=level,
@@ -196,6 +316,9 @@ def interactive_mode():
             encounter_type=selected_enc_type,
             faction=selected_faction,
             race=selected_race,
+            boss_template=selected_boss_template,
+            minion_count=selected_minion_count,
+            defense_profile=selected_defense_profile,
         )
 
         print("\n" * 2)
@@ -271,6 +394,29 @@ def parse_cli_args():
         default="any",
         help="Restrict encounter enemies to a single race"
     )
+    parser.add_argument(
+        "--boss",
+        type=str,
+        default=None,
+        help="Specifically select or forcefully create the Boss NPC (e.g. 'Mountain Troll', 'Troll', 'Bandit Kingpin')"
+    )
+    parser.add_argument(
+        "--minions",
+        "--minion-count",
+        dest="minions",
+        type=int,
+        default=None,
+        choices=range(0, 6),
+        help="Number of minions accompanying the boss (0-5). Automatically balances boss & minion durability."
+    )
+    parser.add_argument(
+        "--defense",
+        "--defense-profile",
+        dest="defense_profile",
+        choices=["auto", "balanced", "ironclad", "arcane", "pyro", "cryo", "venom", "storm", "troll"],
+        default="auto",
+        help="Defensive resistance profile and armor skew for Boss/Elite units (default: auto)"
+    )
     parser.add_argument("--export", action="store_true", help="Export encounter to Markdown file")
     parser.add_argument("--output-dir", type=str, default=".", help="Directory to save exported Markdown")
 
@@ -341,11 +487,18 @@ def main():
         difficulty=diff_map[args.difficulty],
     )
 
+    chosen_type = type_map[args.type]
+    if (args.boss is not None or args.minions is not None) and chosen_type is None:
+        chosen_type = EncounterType.BOSS
+
     encounter = generate_encounter(
         party_config=party_cfg,
-        encounter_type=type_map[args.type],
+        encounter_type=chosen_type,
         faction=faction_map[args.faction],
         race=race_map[args.race],
+        boss_template=args.boss,
+        minion_count=args.minions,
+        defense_profile=args.defense_profile,
     )
 
     print(format_encounter_terminal(encounter))

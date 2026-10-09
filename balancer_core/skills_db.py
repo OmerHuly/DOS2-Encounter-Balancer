@@ -182,6 +182,11 @@ SKILLS_DATABASE: List[Skill] = [
     Skill("Farsight Infusion", "Summoning", "Novice", 1, "Buff", "Grants Incarnate magic armor and ranged magic attack.", "Infused"),
     Skill("Shadow Infusion", "Summoning", "Adept", 1, "Buff", "Grants Incarnate invisibility and Corrupted Blade.", "Infused"),
     Skill("Warp Infusion", "Summoning", "Expert", 1, "Buff", "Grants Incarnate Tactical Retreat and Nether Swap.", "Infused"),
+    # === TROLL RACIAL & SPECIAL ABILITIES ===
+    Skill("Troll Blood", "Special", "Racial", 0, "Healing", "Innate Troll blood: rapidly regenerates massive vitality each round unless suppressed by elemental weakness.", "Troll Blood", memory_cost=0),
+    Skill("Troll Blood (Fire Weakness)", "Special", "Racial", 0, "Healing", "Innate Mountain Troll blood: massive vitality regeneration each round; completely negated while Burning or in Necrofire.", "Troll Blood", memory_cost=0),
+    Skill("Troll Blood (Poison Weakness)", "Special", "Racial", 0, "Healing", "Innate River/Cave Troll blood: massive vitality regeneration each round; completely negated while Poisoned or in Acid.", "Troll Blood", memory_cost=0),
+    Skill("Boulder Toss", "Geomancer", "Novice", 2, "Earth", "Hurl a colossal boulder at the target area, dealing heavy earth damage and setting Crippled.", "Crippled"),
 ]
 
 
@@ -224,7 +229,8 @@ def is_skill_compatible_with_equipment(skill: Skill, equipment: Optional[str]) -
         is_pure_ranged = any(w in eq_lower for w in ["bow", "crossbow", "ballista"]) and not any(
             w in eq_lower for w in [
                 "sword", "axe", "mace", "dagger", "knife", "blade", "spear", "glaive", 
-                "fist", "claw", "waraxe", "battleaxe", "hammer", "scythe", "cleaver"
+                "fist", "claw", "waraxe", "battleaxe", "hammer", "scythe", "cleaver",
+                "club", "trunk", "log", "boulder", "rock"
             ]
         )
         if is_pure_ranged:
@@ -263,12 +269,13 @@ def get_skills_for_archetype(
     ai_tactics: Optional[str] = None,
     equipment: Optional[str] = None,
     signature_skills: Optional[List[str]] = None,
+    class_archetype: Optional[Archetype] = None
 ) -> List[Skill]:
     """
     Selects an appropriate, thematic set of spells for a given archetype, level, and race.
     Prioritizes skills named in AI tactics and explicit signature skills,
     respects equipment requirements (e.g. Shields Up only with shields),
-    and honors archetype school order.
+    and honors archetype school order (including Boss combat specializations).
     """
     allowed_tiers = ["Novice", "Racial"]
     if level >= 4:
@@ -291,7 +298,10 @@ def get_skills_for_archetype(
         Archetype.MINION: ["Warfare", "Geomancer"],
     }
 
-    prefs = school_preferences.get(archetype, ["Warfare"])
+    if archetype == Archetype.BOSS and class_archetype:
+        prefs = school_preferences.get(class_archetype, school_preferences[Archetype.BOSS])
+    else:
+        prefs = school_preferences.get(archetype, ["Warfare"])
     
     # Candidate skills ordered by school preferences, filtered by equipment and tier
     candidate_skills: List[Skill] = []
@@ -323,11 +333,13 @@ def get_skills_for_archetype(
 
     memorized_selected: List[Skill] = []
     for s in tactics_candidates:
+        # If innate (e.g. Troll Blood or racial skill), add to innate_selected without consuming memory slots
+        if s.is_innate:
+            if s not in innate_selected:
+                innate_selected.append(s)
+            continue
         if len(memorized_selected) >= max_slots:
             break
-        # If already innate, it does not consume a memory slot
-        if s in innate_selected or s.is_innate:
-            continue
         # Tier check: allow if tier is unlocked or for bosses (level 3+)
         tier_ok = (s.tier in allowed_tiers) or (archetype == Archetype.BOSS and level >= 3)
         if tier_ok and is_skill_compatible_with_equipment(s, equipment):

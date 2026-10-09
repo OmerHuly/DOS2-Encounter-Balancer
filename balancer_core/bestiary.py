@@ -238,7 +238,21 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Twin Ceremonial Daggers",
         ai_tactics="High movement speed. Ignites surroundings with Dragon's Blaze, then backstabs retreating heroes.",
         gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Rogue). Fast and agile skirmisher.",
+        can_be_boss=True,
         can_be_minion=False
+    ),
+    BestiaryTemplate(
+        name="Lizard Shadowblade Assassin",
+        gm_template_id="Lizards_Female_Armor_Leather_A",
+        faction=Faction.BANDITS,
+        race=Race.LIZARD,
+        archetype=Archetype.ROGUE,
+        equipment="Twin Masterwork Dragon-Bone Daggers",
+        ai_tactics="Lethal shadowblade assassin. Teleports with Cloak and Dagger, strikes from shadows with Backlash and Rupture Tendons, vanishes into Chameleon Cloak, and ignites survivors with Dragon's Blaze.",
+        gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Boss). Iconic Lizard Rogue / Assassin boss.",
+        can_be_boss=True,
+        can_be_minion=False,
+        signature_skills=["Backlash", "Cloak and Dagger", "Rupture Tendons", "Chameleon Cloak", "Adrenaline", "Dragon's Blaze", "Sawtooth Blade"],
     ),
     BestiaryTemplate(
         name="Bandit Lizard Ranger",
@@ -840,6 +854,33 @@ BESTIARY: List[BestiaryTemplate] = [
         gm_notes="Engine template: Creatures_Elemental_A_Fire. Living embodiment of flame.",
         can_be_boss=False
     ),
+    # --- Trolls (Available in DOS2 GM Mode NPC Catalog: Mountain & Forest Trolls) ---
+    BestiaryTemplate(
+        name="Mountain Troll Brute",
+        gm_template_id="Troll_Mountain_A",
+        faction=Faction.BEASTS,
+        race=Race.CREATURE,
+        archetype=Archetype.BOSS,
+        equipment="Colossal Stone Club + Thick Hides",
+        ai_tactics="Devastating frontline brute. Uses Battle Stomp to knock down players, hurls boulders with Fossil Strike, and regenerates massive Vitality with Troll Blood (nullified by Fire/Burning).",
+        gm_notes="Engine template: Troll_Mountain_A (Official DOS2 GM Mode Mountain Troll). Weakness: Fire/Burning deactivates Troll Blood regeneration.",
+        can_be_boss=True,
+        can_be_minion=False,
+        signature_skills=["Battle Stomp", "Fossil Strike", "Battering Ram", "Earthquake", "Troll Blood (Fire Weakness)"],
+    ),
+    BestiaryTemplate(
+        name="Forest Troll Wanderer",
+        gm_template_id="Troll_Forest_A",
+        faction=Faction.BEASTS,
+        race=Race.CREATURE,
+        archetype=Archetype.BOSS,
+        equipment="Ancient Ironbound Log + Moss Armor",
+        ai_tactics="Crushes frontline with Overpower and Whirlwind, roots players with Worm Tremor, and shrugs off attacks with Heart of Steel and Troll Blood.",
+        gm_notes="Engine template: Troll_Forest_A / Trolls_Male (Official DOS2 GM Mode Forest Troll). Legendary forest wanderer with massive HP and cleave.",
+        can_be_boss=True,
+        can_be_minion=False,
+        signature_skills=["Overpower", "Whirlwind", "Battle Stomp", "Heart of Steel", "Worm Tremor", "Troll Blood"],
+    ),
 
     # =========================================================================
     # FACTION: DEMONS & CULTISTS
@@ -959,3 +1000,161 @@ def get_templates_by_faction(faction: Optional[Faction] = None, race: Optional[R
         else:
             templates = [t for t in templates if t.race == race]
     return templates
+
+
+def get_all_boss_templates() -> List[BestiaryTemplate]:
+    """Returns all templates eligible to serve as a boss (can_be_boss=True or archetype=Archetype.BOSS)."""
+    return [t for t in BESTIARY if t.can_be_boss or t.archetype == Archetype.BOSS]
+
+
+def search_templates(query: str, faction: Optional[Faction] = None) -> List[BestiaryTemplate]:
+    """Searches bestiary templates matching query in name, gm_template_id, or gm_notes, prioritizing name matches and bosses."""
+    q = query.strip().lower()
+    if not q:
+        return get_templates_by_faction(faction)
+    pool = BESTIARY if not faction or faction == Faction.ANY else [t for t in BESTIARY if t.faction == faction]
+    name_matches = [t for t in pool if q in t.name.lower()]
+    other_matches = [t for t in pool if (q in t.gm_template_id.lower() or q in t.gm_notes.lower()) and t not in name_matches]
+    name_matches.sort(key=lambda t: 0 if (t.can_be_boss or t.archetype == Archetype.BOSS) else 1)
+    return name_matches + other_matches
+
+
+def find_template_by_name(name_query: str) -> Optional[BestiaryTemplate]:
+    """
+    Finds the best matching BestiaryTemplate by name or engine template ID.
+    Prioritizes exact matches, then name substring matches (preferring bosses), then template ID matches.
+    """
+    q = name_query.strip().lower()
+    if not q:
+        return None
+
+    # 1. Exact match by name
+    for t in BESTIARY:
+        if t.name.lower() == q:
+            return t
+
+    # 2. Exact match by gm_template_id
+    for t in BESTIARY:
+        if t.gm_template_id.lower() == q:
+            return t
+
+    # 3. Substring match by NAME for bosses
+    boss_name_matches = [
+        t for t in BESTIARY 
+        if (t.can_be_boss or t.archetype == Archetype.BOSS) and (q in t.name.lower())
+    ]
+    if boss_name_matches:
+        return boss_name_matches[0]
+
+    # 4. Any substring match by NAME
+    any_name_matches = [t for t in BESTIARY if q in t.name.lower()]
+    if any_name_matches:
+        return any_name_matches[0]
+
+    # 5. Substring match by gm_template_id for bosses
+    boss_id_matches = [
+        t for t in BESTIARY 
+        if (t.can_be_boss or t.archetype == Archetype.BOSS) and (q in t.gm_template_id.lower())
+    ]
+    if boss_id_matches:
+        return boss_id_matches[0]
+
+    # 6. Any substring match by gm_template_id
+    any_id_matches = [t for t in BESTIARY if q in t.gm_template_id.lower()]
+    if any_id_matches:
+        return any_id_matches[0]
+
+    return None
+
+
+def create_custom_boss_template(
+    name: str,
+    faction: Optional[Faction] = None,
+    race: Optional[Race] = None,
+    gm_template_id: Optional[str] = None
+) -> BestiaryTemplate:
+    """Dynamically creates a custom Boss template with smart race, class, and equipment deduction."""
+    clean_id = gm_template_id or f"GM_Custom_{name.strip().replace(' ', '_')}"
+    q = name.lower()
+
+    # Smart race detection
+    detected_race = race
+    if detected_race is None or detected_race == Race.CREATURE:
+        if "undead" in q and "lizard" in q:
+            detected_race = Race.UNDEAD_LIZARD
+        elif "undead" in q and "elf" in q:
+            detected_race = Race.UNDEAD_ELF
+        elif "undead" in q and "dwarf" in q:
+            detected_race = Race.UNDEAD_DWARF
+        elif "undead" in q:
+            detected_race = Race.UNDEAD_HUMAN
+        elif "lizard" in q:
+            detected_race = Race.LIZARD
+        elif "elf" in q:
+            detected_race = Race.ELF
+        elif "dwarf" in q:
+            detected_race = Race.DWARF
+        elif "human" in q:
+            detected_race = Race.HUMAN
+        elif "demon" in q:
+            detected_race = Race.DEMON
+        elif "automaton" in q:
+            detected_race = Race.AUTOMATON
+        else:
+            detected_race = Race.CREATURE
+
+    # Smart faction detection
+    detected_faction = faction
+    if detected_faction is None or detected_faction == Faction.ANY:
+        if any(k in q for k in ["magister", "divine", "paladin"]):
+            detected_faction = Faction.MAGISTERS
+        elif any(k in q for k in ["void", "drillworm", "deep-dweller"]):
+            detected_faction = Faction.VOIDWOKEN
+        elif any(k in q for k in ["undead", "skeleton", "black ring"]):
+            detected_faction = Faction.UNDEAD
+        elif any(k in q for k in ["bandit", "outlaw", "pirate", "thug", "assassin"]):
+            detected_faction = Faction.BANDITS
+        elif any(k in q for k in ["demon", "cultist", "arch-demon"]):
+            detected_faction = Faction.DEMONS
+        elif any(k in q for k in ["automaton", "relic", "clockwork"]):
+            detected_faction = Faction.AUTOMATONS
+        elif detected_race in (Race.LIZARD, Race.ELF, Race.DWARF, Race.HUMAN):
+            detected_faction = Faction.BANDITS
+        else:
+            detected_faction = Faction.BEASTS
+
+    # Smart class archetype and equipment deduction
+    detected_archetype = Archetype.BOSS
+    equipment = "Masterwork Weaponry & Enchanted Armor"
+    ai_tactics = "Focuses key targets, utilizes devastating area-of-effect abilities, and controls the battlefield."
+    sig_skills = None
+
+    if any(k in q for k in ["rogue", "assassin", "shadowblade", "cutthroat", "dagger"]):
+        detected_archetype = Archetype.ROGUE
+        equipment = "Twin Masterwork Dragon-Bone Daggers" if "lizard" in q else "Twin Masterwork Obsidian Daggers"
+        ai_tactics = "Lethal shadowblade assassin. Teleports with Cloak and Dagger, backstabs with Backlash and Rupture Tendons, and vanishes with Chameleon Cloak."
+        sig_skills = ["Backlash", "Cloak and Dagger", "Rupture Tendons", "Adrenaline", "Chameleon Cloak"]
+    elif any(k in q for k in ["ranger", "archer", "marksman", "hunter", "sniper", "bow"]):
+        detected_archetype = Archetype.RANGER
+        equipment = "Masterwork Composite Bow"
+        ai_tactics = "Deadly long-range sniper. Seeks high ground (+20% damage), pins down players, and fires Ricochet and Barrage."
+        sig_skills = ["Ricochet", "Pin Down", "First Aid", "Sky Shot"]
+    elif any(k in q for k in ["mage", "wizard", "sorcerer", "elementalist", "pyro"]):
+        detected_archetype = Archetype.MAGE
+        equipment = "Enchanted Pyromancy Staff"
+        ai_tactics = "Devastating spellcaster. Casts high-impact elemental spells and coats the battlefield in surfaces."
+        sig_skills = ["Fireball", "Searing Daggers", "Ignition", "Peace of Mind"]
+
+    return BestiaryTemplate(
+        name=name.strip(),
+        gm_template_id=clean_id,
+        faction=detected_faction,
+        race=detected_race,
+        archetype=detected_archetype,
+        equipment=equipment,
+        ai_tactics=ai_tactics,
+        gm_notes=f"Forcefully designated GM Boss: {name.strip()}. Custom narrative centerpiece.",
+        can_be_boss=True,
+        signature_skills=sig_skills,
+    )
+

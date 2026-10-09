@@ -116,7 +116,8 @@ def get_base_armor(level: int) -> int:
 def calculate_attributes_for_level(
     level: int,
     archetype: Archetype,
-    polymorph_points: int = 0
+    polymorph_points: int = 0,
+    class_archetype: Optional[Archetype] = None
 ) -> Tuple[int, int, int, int, int, int]:
     """
     Distributes attribute points (STR, FIN, INT, CON, MEM, WIT) based on level, archetype, and Polymorph.
@@ -130,10 +131,6 @@ def calculate_attributes_for_level(
     str_pts, fin_pts, int_pts, con_pts, mem_pts, wit_pts = 0, 0, 0, 0, 0, 0
     
     # Reserve memory to allow adequate skill memorization
-    # Novice (lvl 1-3): 10-11 MEM (3-4 skills)
-    # Adept (lvl 4-8): 12-14 MEM (5-7 skills)
-    # Expert (lvl 9-15): 15-18 MEM (8-11 skills)
-    # Master (lvl 16+): 19-24 MEM (12+ skills)
     if level >= 16:
         mem_pts = min(12, total_points // 4)
     elif level >= 9:
@@ -160,12 +157,25 @@ def calculate_attributes_for_level(
         str_pts = int(remaining * 0.30)
         con_pts = remaining - (int_pts + str_pts)
     elif archetype == Archetype.BOSS:
-        # Bosses have inflated stats across the board
-        primary = int(remaining * 0.50)
-        str_pts = primary // 2
-        int_pts = primary // 2
-        con_pts = int(remaining * 0.30)
-        wit_pts = remaining - (str_pts + int_pts + con_pts)
+        # Bosses have inflated stats tailored to their combat specialization
+        if class_archetype in (Archetype.ROGUE, Archetype.RANGER):
+            fin_pts = int(remaining * 0.55)
+            wit_pts = int(remaining * 0.20)
+            con_pts = remaining - (fin_pts + wit_pts)
+        elif class_archetype in (Archetype.MAGE, Archetype.SUMMONER):
+            int_pts = int(remaining * 0.55)
+            wit_pts = int(remaining * 0.20)
+            con_pts = remaining - (int_pts + wit_pts)
+        elif class_archetype in (Archetype.TANK, Archetype.FIGHTER):
+            str_pts = int(remaining * 0.55)
+            con_pts = int(remaining * 0.25)
+            wit_pts = remaining - (str_pts + con_pts)
+        else:
+            primary = int(remaining * 0.50)
+            str_pts = primary // 2
+            int_pts = primary // 2
+            con_pts = int(remaining * 0.30)
+            wit_pts = remaining - (str_pts + int_pts + con_pts)
     elif archetype == Archetype.MINION:
         # Minions have very low attribute investment
         str_pts = int(remaining * 0.4)
@@ -191,8 +201,12 @@ def calculate_attributes_for_level(
     return str_val, fin_val, int_val, con_val, mem_val, wit_val
 
 
-def calculate_combat_abilities(level: int, archetype: Archetype) -> Dict[str, int]:
-    """Calculates combat ability points according to level and archetype."""
+def calculate_combat_abilities(
+    level: int,
+    archetype: Archetype,
+    class_archetype: Optional[Archetype] = None
+) -> Dict[str, int]:
+    """Calculates combat ability points according to level, archetype, and class specialization."""
     points = max(2, level + 1)
     abilities: Dict[str, int] = {}
     
@@ -222,9 +236,20 @@ def calculate_combat_abilities(level: int, archetype: Archetype) -> Dict[str, in
     elif archetype == Archetype.SUMMONER:
         abilities["Summoning"] = min(10, points)
     elif archetype == Archetype.BOSS:
-        abilities["Warfare"] = min(10, points // 2 + 2)
-        abilities["Necromancer"] = max(2, points // 3)
-        abilities["Leadership"] = max(2, points // 4)
+        if class_archetype == Archetype.ROGUE:
+            abilities["Scoundrel"] = min(10, points // 2 + 2)
+            abilities["Dual Wielding"] = max(2, points // 3)
+            abilities["Polymorph"] = max(1, points // 4)
+        elif class_archetype == Archetype.RANGER:
+            abilities["Huntsman"] = min(10, points // 2 + 2)
+            abilities["Ranged"] = max(2, points // 3)
+        elif class_archetype in (Archetype.MAGE, Archetype.SUMMONER):
+            abilities["Pyrokinetic"] = min(10, points // 2 + 1)
+            abilities["Geomancer"] = max(2, points // 3)
+            abilities["Aerotheurge"] = max(1, points // 4)
+        else:
+            abilities["Warfare"] = min(10, points // 2 + 2)
+            abilities["Necromancer"] = max(2, points // 3)
     elif archetype == Archetype.MINION:
         abilities["Single-Handed"] = 1
         abilities["Warfare"] = 1
@@ -329,10 +354,10 @@ ARCHETYPE_TALENTS: Dict[Archetype, List[str]] = {
     ],
     Archetype.BOSS: [
         "Opportunist",       # Lvl 1
-        "Executioner",       # Lvl 3
-        "Torturer",          # Lvl 8
-        "Living Armor",      # Lvl 13
-        "Hothead",           # Lvl 18
+        "Walk It Off",       # Lvl 3 - Authentic DOS2 campaign boss talent: reduces status durations by 1 turn
+        "Executioner",       # Lvl 8
+        "Torturer",          # Lvl 13
+        "Living Armor",      # Lvl 18
         "Picture of Health", # Lvl 23
         "Savage Sortilege",  # Lvl 28
         "Comeback Kid",      # Lvl 33
@@ -401,11 +426,13 @@ def calculate_enemy_stats(
     difficulty: Difficulty = Difficulty.BALANCED,
     damage_profile: DamageProfile = DamageProfile.BALANCED,
     race: Race = Race.HUMAN,
-    combat_abilities: Optional[Dict[str, int]] = None
+    combat_abilities: Optional[Dict[str, int]] = None,
+    class_archetype: Optional[Archetype] = None
 ) -> EnemyStats:
     """
     Computes exact, balanced HP, Physical Armor, and Magic Armor for an NPC,
-    taking into account DOS2 Definitive Edition mechanics, archetype, race, and party damage profile.
+    taking into account DOS2 Definitive Edition mechanics, archetype, race, party damage profile,
+    and class specialization (e.g. Rogue Boss, Ranger Boss).
     """
     base_vit = get_base_vitality(level)
     base_arm = get_base_armor(level)
@@ -416,7 +443,7 @@ def calculate_enemy_stats(
     diff_mult = DIFFICULTY_MULTIPLIERS.get(difficulty, 1.00)
     
     if combat_abilities is None:
-        abilities = calculate_combat_abilities(level, archetype)
+        abilities = calculate_combat_abilities(level, archetype, class_archetype=class_archetype)
     else:
         abilities = dict(combat_abilities)
 
@@ -424,7 +451,7 @@ def calculate_enemy_stats(
 
     # Attribute calculations (including 1 free attribute point per point in Polymorph)
     str_val, fin_val, int_val, con_val, mem_val, wit_val = calculate_attributes_for_level(
-        level, archetype, polymorph_points=polymorph_pts
+        level, archetype, polymorph_points=polymorph_pts, class_archetype=class_archetype
     )
     
     # In DOS2, CON gives +7% Vitality per point above 10
@@ -460,8 +487,10 @@ def calculate_enemy_stats(
     ap_recovery = 4
     if archetype == Archetype.BOSS:
         ap_start = 6
-        ap_max = 8
-        ap_recovery = 6
+        ap_max = 6
+        ap_recovery = 4  # GM mode limitation: cannot set more than 6 start AP and 4 AP recovery
+        if "Perseverance" not in abilities:
+            abilities["Perseverance"] = 3  # Anti-chain-CC buffer (restores 15% armor on CC recovery)
     elif archetype == Archetype.MINION:
         ap_start = 3
         ap_max = 4
@@ -493,7 +522,8 @@ def sync_stats_with_combat_abilities(
     level: int,
     archetype: Archetype,
     race: Race = Race.HUMAN,
-    difficulty: Difficulty = Difficulty.BALANCED
+    difficulty: Difficulty = Difficulty.BALANCED,
+    class_archetype: Optional[Archetype] = None
 ) -> None:
     """
     Synchronizes an EnemyStats object's attributes, vitality, and initiative with its
@@ -501,7 +531,7 @@ def sync_stats_with_combat_abilities(
     """
     poly_pts = stats.combat_abilities.get("Polymorph", 0)
     str_val, fin_val, int_val, con_val, mem_val, wit_val = calculate_attributes_for_level(
-        level, archetype, polymorph_points=poly_pts
+        level, archetype, polymorph_points=poly_pts, class_archetype=class_archetype
     )
     if race in (Race.HUMAN, Race.UNDEAD_HUMAN):
         wit_val += 2

@@ -25,9 +25,24 @@ from .formulas import (
     get_base_vitality,
     get_base_armor,
 )
-from .bestiary import BESTIARY, get_templates_by_faction
+from .bestiary import (
+    BESTIARY,
+    get_templates_by_faction,
+    get_all_boss_templates,
+    search_templates,
+    find_template_by_name,
+    create_custom_boss_template,
+)
 from .skills_db import SKILLS_DATABASE, get_skills_for_archetype
-from .generator import generate_encounter, analyze_encounter_balance
+from .generator import (
+    generate_encounter,
+    analyze_encounter_balance,
+    calculate_boss_scaling,
+    BossScalingProfile,
+    DefenseProfile,
+    DEFENSE_PROFILES,
+    auto_detect_defense_profile,
+)
 from .exporter import format_encounter_terminal, export_encounter_to_markdown
 
 __all__ = [
@@ -52,10 +67,20 @@ __all__ = [
     "get_base_armor",
     "BESTIARY",
     "get_templates_by_faction",
+    "get_all_boss_templates",
+    "search_templates",
+    "find_template_by_name",
+    "create_custom_boss_template",
     "SKILLS_DATABASE",
     "get_skills_for_archetype",
     "generate_encounter",
     "analyze_encounter_balance",
+    "calculate_boss_scaling",
+    "BossScalingProfile",
+    "DefenseProfile",
+    "DEFENSE_PROFILES",
+    "auto_detect_defense_profile",
     "format_encounter_terminal",
     "export_encounter_to_markdown",
 ]
+
