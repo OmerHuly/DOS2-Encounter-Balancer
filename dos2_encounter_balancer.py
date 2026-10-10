@@ -47,20 +47,128 @@ from balancer_core import (
 
 def print_banner():
     banner = r"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║     DIVINITY: ORIGINAL SIN 2 DEFINITIVE EDITION - GM ENCOUNTER BALANCER      ║
-║          Precision Tactical Math • Faction Bestiary • Action Economy         ║
-╚══════════════════════════════════════════════════════════════════════════════╝
++==============================================================================+
+|     DIVINITY: ORIGINAL SIN 2 DEFINITIVE EDITION - GM ENCOUNTER BALANCER      |
+|          Precision Tactical Math | Faction Bestiary | Action Economy         |
++==============================================================================+
 """
     print(banner)
 
 
-def prompt_int(prompt_text: str, default: int, min_val: int = 1, max_val: int = 30) -> int:
+def clean_exit(message: str = "\nGood luck with your campaign, GM! May your dice roll true.\n") -> None:
+    """Terminates the program cleanly with a friendly exit message."""
+    print(message)
+    sys.exit(0)
+
+
+def prompt_input(prompt_text: str = "") -> str:
+    """Reads user input with immediate ESC key detection for clean exit at every stage.
+
+    On interactive consoles (Windows msvcrt or Unix termios), hitting the ESC key
+    immediately exits the app cleanly without requiring Enter. Falls back to standard
+    input() when stdin is piped or redirected (e.g. during test runs or script pipes).
+    """
+    if sys.stdin.isatty():
+        # Windows console implementation
+        try:
+            import msvcrt
+            sys.stdout.write(prompt_text)
+            sys.stdout.flush()
+            chars = []
+            while True:
+                ch = msvcrt.getwch()
+                code = ord(ch)
+                if code == 27:  # ESC key
+                    clean_exit()
+                elif code in (3, 4):  # Ctrl+C, Ctrl+D
+                    clean_exit()
+                elif code in (10, 13):  # Enter key (LF, CR)
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    res = "".join(chars).strip()
+                    if res.lower() in ("q", "quit", "exit"):
+                        clean_exit()
+                    return res
+                elif code in (8, 127):  # Backspace
+                    if chars:
+                        chars.pop()
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                elif code in (0, 224):  # Extended key prefix (arrows, F-keys)
+                    msvcrt.getwch()  # Consume the scan code
+                elif code >= 32:  # Regular printable characters
+                    chars.append(ch)
+                    sys.stdout.write(ch)
+                    sys.stdout.flush()
+        except ImportError:
+            # Unix tty implementation
+            try:
+                import termios
+                import tty
+                import select
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                sys.stdout.write(prompt_text)
+                sys.stdout.flush()
+                chars = []
+                try:
+                    tty.setcbreak(fd)
+                    while True:
+                        ch = sys.stdin.read(1)
+                        if not ch:
+                            clean_exit()
+                        code = ord(ch)
+                        if code == 27:  # ESC key or escape sequence
+                            r, _, _ = select.select([sys.stdin], [], [], 0.05)
+                            if not r:
+                                clean_exit()
+                            else:
+                                seq = sys.stdin.read(1)
+                                if seq in ("[", "O"):
+                                    sys.stdin.read(1)
+                        elif code in (3, 4):  # Ctrl+C, Ctrl+D
+                            clean_exit()
+                        elif code in (10, 13):  # Enter key
+                            sys.stdout.write("\n")
+                            sys.stdout.flush()
+                            res = "".join(chars).strip()
+                            if res.lower() in ("q", "quit", "exit"):
+                                clean_exit()
+                            return res
+                        elif code in (8, 127):  # Backspace
+                            if chars:
+                                chars.pop()
+                                sys.stdout.write("\b \b")
+                                sys.stdout.flush()
+                        elif code >= 32:  # Printable character
+                            chars.append(ch)
+                            sys.stdout.write(ch)
+                            sys.stdout.flush()
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except Exception:
+                pass
+
+    # Non-TTY / piped input fallback (e.g. automated tests, redirection)
+    try:
+        raw = input(prompt_text).strip()
+        if raw == chr(27) or raw.lower() in ("q", "quit", "exit"):
+            clean_exit()
+        return raw
+    except (KeyboardInterrupt, EOFError):
+        clean_exit()
+
+
+def prompt_int(prompt_text: str, default: Optional[int] = None, min_val: int = 1, max_val: int = 30) -> int:
+    suffix = f" [{default}]" if default is not None else f" [{min_val}-{max_val}]"
     while True:
         try:
-            raw = input(f"{prompt_text} [{default}]: ").strip()
+            raw = prompt_input(f"{prompt_text}{suffix}: ")
             if not raw:
-                return default
+                if default is not None:
+                    return default
+                print(f"  [!] Input required. Please enter a number between {min_val} and {max_val}.")
+                continue
             val = int(raw)
             if min_val <= val <= max_val:
                 return val
@@ -76,7 +184,7 @@ def prompt_choice(prompt_text: str, options: list, default_index: int = 0):
         label = opt.value if hasattr(opt, "value") else str(opt)
         print(f"  [{idx}] {label}{marker}")
     while True:
-        raw = input(f"Select option [1-{len(options)}] (Enter for default {default_index + 1}): ").strip()
+        raw = prompt_input(f"Select option [1-{len(options)}] (Enter for default {default_index + 1}): ")
         if not raw:
             return options[default_index]
         try:
@@ -91,7 +199,7 @@ def prompt_choice(prompt_text: str, options: list, default_index: int = 0):
 def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
     def_str = "Y/n" if default else "y/N"
     while True:
-        raw = input(f"{prompt_text} [{def_str}]: ").strip().lower()
+        raw = prompt_input(f"{prompt_text} [{def_str}]: ").lower()
         if not raw:
             return default
         if raw in ("y", "yes"):
@@ -103,14 +211,15 @@ def prompt_yes_no(prompt_text: str, default: bool = False) -> bool:
 
 def interactive_mode():
     print_banner()
-    print("Welcome GM! Let's dial in your party's combat profile to generate a tailored encounter.\n")
+    print("Welcome GM! Let's dial in your party's combat profile to generate a tailored encounter.")
+    print("Tip: Press ESC (or type 'q' / 'exit') at any prompt to exit cleanly.\n")
 
     # 1. Party setup
-    level = prompt_int("► What level is the player party?", default=4, min_val=1, max_val=25)
-    party_size = prompt_int("► How many players are in the party?", default=4, min_val=1, max_val=4)
+    party_size = prompt_int("> How many players are in the party?", default=4, min_val=1, max_val=4)
+    level = prompt_int("> What level is the player party?", default=None, min_val=1, max_val=25)
     is_lone_wolf = False
     if party_size in (1, 2):
-        is_lone_wolf = prompt_yes_no("► Are the players using the Lone Wolf talent?", default=False)
+        is_lone_wolf = prompt_yes_no("> Are the players using the Lone Wolf talent?", default=False)
 
     # 2. Damage profile
     damage_options = [
@@ -120,7 +229,7 @@ def interactive_mode():
         DamageProfile.PHYSICAL_LEAN,
         DamageProfile.MAGICAL_LEAN,
     ]
-    damage_profile = prompt_choice("► What is the party's damage composition?", damage_options, default_index=0)
+    damage_profile = prompt_choice("> What is the party's damage composition?", damage_options, default_index=0)
 
     # 3. Target difficulty
     diff_options = [
@@ -129,7 +238,7 @@ def interactive_mode():
         Difficulty.STORY,
         Difficulty.DEADLY,
     ]
-    difficulty = prompt_choice("► Desired encounter difficulty tier?", diff_options, default_index=0)
+    difficulty = prompt_choice("> Desired encounter difficulty tier?", diff_options, default_index=0)
 
     # 4. Encounter type
     enc_options = [
@@ -140,7 +249,7 @@ def interactive_mode():
         (EncounterType.ELITE.value, EncounterType.ELITE),
     ]
     enc_type_choice = prompt_choice(
-        "► Select Encounter Type",
+        "> Select Encounter Type",
         [opt[0] for opt in enc_options],
         default_index=0
     )
@@ -151,17 +260,17 @@ def interactive_mode():
     selected_boss_template = None
     selected_defense_profile = "auto"
     if selected_enc_type == EncounterType.BOSS:
-        print("\n" + "─" * 60)
-        print("  👑 BOSS ENCOUNTER CONFIGURATION")
-        print("─" * 60)
+        print("\n" + "-" * 60)
+        print("  BOSS ENCOUNTER CONFIGURATION")
+        print("-" * 60)
         print("Specify the number of minions accompanying the boss (0 to 5):")
-        print("  • 0 Minions: Epic Solo Boss duel (boss receives Solo Overlord HP/armor/AP scaling)")
-        print("  • 1-2 Minions: Small squad (Boss + Lieutenant / Guard)")
-        print("  • 3 Minions: Standard balanced boss squad")
-        print("  • 4-5 Minions: Boss with minion swarm (boss & minions scaled down for AP balance)")
+        print("  * 0 Minions: Epic Solo Boss duel (boss receives Solo Overlord HP/armor/AP scaling)")
+        print("  * 1-2 Minions: Small squad (Boss + Lieutenant / Guard)")
+        print("  * 3 Minions: Standard balanced boss squad")
+        print("  * 4-5 Minions: Boss with minion swarm (boss & minions scaled down for AP balance)")
         default_minions = 2 if is_lone_wolf else 3
         selected_minion_count = prompt_int(
-            "► How many minions should accompany the boss? [0-5]",
+            "> How many minions should accompany the boss? [0-5]",
             default=default_minions,
             min_val=0,
             max_val=5
@@ -173,25 +282,25 @@ def interactive_mode():
             "Search Bestiary by keyword (e.g. 'Troll', 'Spider', 'Magister')",
             "Forcefully designate / create a custom Boss (e.g. 'Cave Troll Chieftain')",
         ]
-        b_choice = prompt_choice("► Select Boss NPC", boss_selection_modes, default_index=0)
+        b_choice = prompt_choice("> Select Boss NPC", boss_selection_modes, default_index=0)
         
         if b_choice == boss_selection_modes[1]:
             boss_list = get_all_boss_templates()
             boss_options = [f"{b.name} ({b.faction.value} | {b.race.value})" for b in boss_list]
-            selected_boss_opt = prompt_choice("► Choose Boss from Bestiary", boss_options, default_index=0)
+            selected_boss_opt = prompt_choice("> Choose Boss from Bestiary", boss_options, default_index=0)
             selected_boss_template = boss_list[boss_options.index(selected_boss_opt)]
         elif b_choice == boss_selection_modes[2]:
-            keyword = input("► Enter search term for Boss (e.g. 'troll'): ").strip()
+            keyword = prompt_input("> Enter search term for Boss (e.g. 'troll'): ")
             matches = search_templates(keyword)
             if matches:
                 match_options = [f"{m.name} ({m.faction.value} | {m.race.value})" for m in matches]
-                chosen_match = prompt_choice(f"► Found {len(matches)} matching NPCs. Select one as Boss", match_options, default_index=0)
+                chosen_match = prompt_choice(f"> Found {len(matches)} matching NPCs. Select one as Boss", match_options, default_index=0)
                 selected_boss_template = matches[match_options.index(chosen_match)]
             else:
                 print(f"  [!] No existing templates matched '{keyword}'. Will forcefully create custom Boss '{keyword}'.")
                 selected_boss_template = keyword
         elif b_choice == boss_selection_modes[3]:
-            custom_name = input("► Enter custom Boss NPC name: ").strip()
+            custom_name = prompt_input("> Enter custom Boss NPC name: ")
             if custom_name:
                 selected_boss_template = custom_name
 
@@ -206,7 +315,7 @@ def interactive_mode():
             ("Storm Conduit (Air Immune / Earth Weakness)", "storm"),
             ("Troll Hide (Massive Phys Armor / Earth Res / Fire Weakness suppresses regen)", "troll"),
         ]
-        def_choice = prompt_choice("► Defensive & Elemental Weakness Profile", [opt[0] for opt in defense_options], default_index=0)
+        def_choice = prompt_choice("> Defensive & Elemental Weakness Profile", [opt[0] for opt in defense_options], default_index=0)
         selected_defense_profile = next(item[1] for item in defense_options if item[0] == def_choice)
 
     # Check if Faction and Race selection can be skipped:
@@ -236,7 +345,7 @@ def interactive_mode():
 
         faction_desc = selected_faction.value if selected_faction != Faction.ANY else "Thematic"
         race_desc = selected_race.value if selected_race else "Default"
-        print(f"\n[✓] Solo Boss duel configured for '{boss_name}' ({faction_desc} | {race_desc}).")
+        print(f"\n[+] Solo Boss duel configured for '{boss_name}' ({faction_desc} | {race_desc}).")
         print("    Skipping Faction & Race selection (encounter consists solely of the designated Boss NPC).")
     else:
         # Resolve boss template if one was chosen for minion faction defaulting
@@ -248,9 +357,9 @@ def interactive_mode():
                 boss_tpl = find_template_by_name(str(selected_boss_template))
 
         # 5. Faction / Theme
-        prompt_faction_title = "► Select Thematic Enemy Faction"
+        prompt_faction_title = "> Select Thematic Enemy Faction"
         if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
-            prompt_faction_title = "► Select Minion Faction / Theme"
+            prompt_faction_title = "> Select Minion Faction / Theme"
 
         faction_options = [
             ("Random / Mixed Factions", Faction.ANY),
@@ -278,9 +387,9 @@ def interactive_mode():
         selected_faction = next(item[1] for item in faction_options if item[0] == faction_choice)
 
         # 6. Single Race Filter (Optional)
-        prompt_race_title = "► Restrict Encounter to a Single Enemy Race?"
+        prompt_race_title = "> Restrict Encounter to a Single Enemy Race?"
         if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
-            prompt_race_title = "► Restrict Minions to a Single Enemy Race?"
+            prompt_race_title = "> Restrict Minions to a Single Enemy Race?"
 
         race_options = [
             ("Any / Multi-racial (Default)", None),
@@ -331,16 +440,15 @@ def interactive_mode():
         print("  [4] Exit")
         print("=" * 72)
 
-        action = input("Select action [1-4] (Default: 1): ").strip()
+        action = prompt_input("Select action [1-4] (Default: 1): ")
         if action == "2":
             md_path = export_encounter_to_markdown(encounter)
-            print(f"\n[✓] Battle sheet successfully exported to: {os.path.abspath(md_path)}\n")
-            input("Press Enter to continue...")
+            print(f"\n[+] Battle sheet successfully exported to: {os.path.abspath(md_path)}\n")
+            prompt_input("Press Enter to continue...")
         elif action == "3":
             return interactive_mode()
         elif action == "4":
-            print("\nGood luck with your campaign, GM! May your dice roll true.\n")
-            break
+            clean_exit()
         else:
             print("\nGenerating fresh encounter variant...\n")
 
@@ -506,8 +614,11 @@ def main():
     if args.export:
         os.makedirs(args.output_dir, exist_ok=True)
         md_path = export_encounter_to_markdown(encounter, output_dir=args.output_dir)
-        print(f"\n[✓] Battle sheet exported to: {os.path.abspath(md_path)}\n")
+        print(f"\n[+] Battle sheet exported to: {os.path.abspath(md_path)}\n")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, EOFError):
+        clean_exit()
