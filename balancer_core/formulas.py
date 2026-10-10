@@ -6,7 +6,8 @@ archetype weighting, difficulty modifiers, and action economy calculations.
 """
 
 import math
-from typing import Dict, Tuple
+import re
+from typing import Dict, Tuple, List, Optional
 from .models import Archetype, Difficulty, EnemyStats, PartyConfig, DamageProfile, Race
 
 
@@ -270,47 +271,213 @@ def get_talent_points_for_level(level: int) -> int:
     return sum(1 for milestone in TALENT_LEVEL_MILESTONES if level >= milestone)
 
 
+# Comprehensive list of all authentic talents available in Divinity: Original Sin 2 Definitive Edition
+ALL_GAME_TALENTS: List[str] = [
+    # Standard Combat & Utility Talents
+    "All Skilled Up",
+    "Ambidextrous",
+    "Arrow Recovery",
+    "Bigger and Better",
+    "Comeback Kid",
+    "Demon",
+    "Duck Duck Goose",
+    "Elemental Affinity",
+    "Escapist",
+    "Executioner",
+    "Far Out Man",
+    "Five-Star Diner",
+    "Glass Cannon",
+    "Guerrilla",
+    "Guerilla",          # Common spelling variant
+    "Hothead",
+    "Ice King",
+    "Leech",
+    "Living Armor",
+    "Living Armour",     # Official UK English spelling
+    "Lone Wolf",
+    "Lonewolf",          # Alternate compound spelling
+    "Mnemonic",
+    "Morning Person",
+    "Opportunist",
+    "Parry Master",
+    "Pet Pal",
+    "Picture of Health",
+    "Savage Sortilege",
+    "Slingshot",
+    "Stench",
+    "The Pawn",
+    "Torturer",
+    "Unstable",
+    "Walk It Off",
+    "What a Rush",
+    # Racial Traits & Talents (2 innate passives per playable race)
+    "Ancestral Knowledge",  # Elf (+1 Loremaster)
+    "Corpse Eater",         # Elf (Eat body parts to learn memories/skills)
+    "Dwarven Guile",        # Dwarf (+1 Sneaking)
+    "Ingenious",            # Human (+Crit, +Init)
+    "Sophisticated",        # Lizard (+Fire & Poison Resistance)
+    "Spellsong",            # Lizard (+1 Persuasion)
+    "Sturdy",               # Dwarf (+10% Vitality, +5% Dodging)
+    "Thrifty",              # Human (+1 Bartering)
+    "Undead",               # Undead (Poison heals, heals damage, lockpicking)
+]
+
+
+# Authentic racial talent pairings per race
+RACIAL_TALENTS: Dict[Race, List[str]] = {
+    Race.HUMAN: ["Ingenious", "Thrifty"],
+    Race.ELF: ["Corpse Eater", "Ancestral Knowledge"],
+    Race.DWARF: ["Sturdy", "Dwarven Guile"],
+    Race.LIZARD: ["Sophisticated", "Spellsong"],
+    Race.UNDEAD: ["Undead"],
+    Race.UNDEAD_HUMAN: ["Undead", "Ingenious", "Thrifty"],
+    Race.UNDEAD_ELF: ["Undead", "Corpse Eater", "Ancestral Knowledge"],
+    Race.UNDEAD_DWARF: ["Undead", "Sturdy", "Dwarven Guile"],
+    Race.UNDEAD_LIZARD: ["Undead", "Sophisticated", "Spellsong"],
+}
+
+
+# Combat ability prerequisites in DOS2 Definitive Edition:
+# - Executioner & Picture of Health require Warfare 1
+# - The Pawn requires Scoundrel 1
+# - Duck Duck Goose requires Huntsman 1
+# - Demon requires Pyrokinetic 1
+# - Ice King requires Hydrosophist 1
+TALENT_PREREQUISITES: Dict[str, Dict[str, int]] = {
+    "Executioner": {"Warfare": 1},
+    "Picture of Health": {"Warfare": 1},
+    "The Pawn": {"Scoundrel": 1},
+    "Duck Duck Goose": {"Huntsman": 1},
+    "Demon": {"Pyrokinetic": 1},
+    "Ice King": {"Hydrosophist": 1},
+}
+
+# Mutually exclusive talent pairings in DOS2 Definitive Edition
+TALENT_INCOMPATIBILITIES: Dict[str, List[str]] = {
+    "Executioner": ["The Pawn"],
+    "The Pawn": ["Executioner"],
+    "Demon": ["Ice King"],
+    "Ice King": ["Demon"],
+    "Lone Wolf": ["Glass Cannon"],
+    "Glass Cannon": ["Lone Wolf"],
+}
+
+
+def is_talent_compatible(
+    talent_name: str,
+    current_talents: List[str],
+    combat_abilities: Optional[Dict[str, int]] = None,
+    level: int = 1,
+    equipment: Optional[str] = None
+) -> bool:
+    """
+    Validates whether a character meets all prerequisites and compatibility criteria
+    for a given talent under official DOS2 Definitive Edition rules.
+    """
+    clean_name = talent_name.split(" (")[0].strip()
+
+    # Already has this talent
+    if any(t.split(" (")[0].strip() == clean_name for t in current_talents):
+        return False
+
+    # Check combat ability prerequisites
+    if clean_name in TALENT_PREREQUISITES and combat_abilities is not None:
+        for req_ability, req_val in TALENT_PREREQUISITES[clean_name].items():
+            if combat_abilities.get(req_ability, 0) < req_val:
+                return False
+
+    # Check level prerequisites
+    if clean_name in ("All Skilled Up", "Bigger and Better") and level < 2:
+        return False
+
+    # Check mutually exclusive incompatibilities
+    if clean_name in TALENT_INCOMPATIBILITIES:
+        for inc in TALENT_INCOMPATIBILITIES[clean_name]:
+            if any(t.split(" (")[0].strip() == inc for t in current_talents):
+                return False
+
+    # Check equipment suitability
+    if equipment is not None:
+        eq_lower = equipment.lower()
+        is_ranged_only = (
+            any(r in eq_lower for r in ["wand", "bow", "crossbow"])
+            and not any(
+                m in eq_lower
+                for m in [
+                    "sword", "axe", "mace", "dagger", "spear", "staff",
+                    "greatsword", "battleaxe", "scimitar", "blade", "hammer"
+                ]
+            )
+        )
+        if clean_name == "Opportunist" and is_ranged_only:
+            # Attacks of opportunity strictly require melee weapons in DOS2
+            return False
+        if clean_name == "Parry Master" and not any(d in eq_lower for d in ["dual", "twin", "pair", "daggers"]):
+            return False
+        if clean_name == "Ambidextrous" and any(s in eq_lower for s in ["shield", "dual", "twin"]):
+            return False
+
+    return True
+
+
+def validate_and_filter_talents(
+    talents: List[str],
+    combat_abilities: Optional[Dict[str, int]] = None,
+    level: int = 1,
+    equipment: Optional[str] = None
+) -> List[str]:
+    """
+    Filters a list of talents to ensure all combat ability prerequisites, mutual exclusions,
+    and equipment rules are satisfied. Disqualified talents are removed.
+    """
+    valid: List[str] = []
+    for t in talents:
+        if is_talent_compatible(t, valid, combat_abilities=combat_abilities, level=level, equipment=equipment):
+            valid.append(t)
+    return valid
+
+
 # Authentic DOS2 talent priority queues per archetype (ordered from earliest to latest acquisition)
 ARCHETYPE_TALENTS: Dict[Archetype, List[str]] = {
     Archetype.TANK: [
         "Opportunist",       # Lvl 1
-        "Picture of Health", # Lvl 3
+        "Picture of Health", # Lvl 3 (Warfare 1)
         "Living Armor",      # Lvl 8
         "Comeback Kid",      # Lvl 13
-        "The Pawn",          # Lvl 18
-        "Executioner",       # Lvl 23
-        "What a Rush",       # Lvl 28
+        "Executioner",       # Lvl 18 (Warfare 1)
+        "What a Rush",       # Lvl 23
+        "Hothead",           # Lvl 28
         "Mnemonic",          # Lvl 33
     ],
     Archetype.FIGHTER: [
         "Opportunist",       # Lvl 1
-        "Picture of Health", # Lvl 3
-        "Executioner",       # Lvl 8
-        "The Pawn",          # Lvl 13
-        "Living Armor",      # Lvl 18
-        "Hothead",           # Lvl 23
-        "Comeback Kid",      # Lvl 28
-        "What a Rush",       # Lvl 33
-    ],
-    Archetype.RANGER: [
-        "Duck Duck Goose",   # Lvl 1
-        "Hothead",           # Lvl 3
-        "Executioner",       # Lvl 8
-        "Elemental Ranger",  # Lvl 13
-        "The Pawn",          # Lvl 18
-        "Far Out Man",       # Lvl 23
+        "Picture of Health", # Lvl 3 (Warfare 1)
+        "Executioner",       # Lvl 8 (Warfare 1)
+        "Living Armor",      # Lvl 13
+        "Hothead",           # Lvl 18
+        "Comeback Kid",      # Lvl 23
         "What a Rush",       # Lvl 28
         "Mnemonic",          # Lvl 33
     ],
+    Archetype.RANGER: [
+        "Duck Duck Goose",   # Lvl 1 (Huntsman 1)
+        "Hothead",           # Lvl 3
+        "Far Out Man",       # Lvl 8
+        "What a Rush",       # Lvl 13
+        "Arrow Recovery",    # Lvl 18
+        "Mnemonic",          # Lvl 23
+        "Comeback Kid",      # Lvl 28
+        "Living Armor",      # Lvl 33
+    ],
     Archetype.ROGUE: [
-        "The Pawn",          # Lvl 1
-        "Back-to-the-Wall",   # Lvl 3
+        "The Pawn",          # Lvl 1 (Scoundrel 1)
+        "Parry Master",      # Lvl 3
         "Torturer",          # Lvl 8
-        "Opportunist",       # Lvl 13
-        "Executioner",       # Lvl 18
-        "Hothead",           # Lvl 23
-        "What a Rush",       # Lvl 28
-        "Parry Master",      # Lvl 33
+        "Opportunist",       # Lvl 13 (Daggers are melee)
+        "Hothead",           # Lvl 18
+        "What a Rush",       # Lvl 23
+        "Comeback Kid",      # Lvl 28
+        "Guerrilla",         # Lvl 33
     ],
     Archetype.MAGE: [
         "Elemental Affinity",# Lvl 1
@@ -319,7 +486,7 @@ ARCHETYPE_TALENTS: Dict[Archetype, List[str]] = {
         "Far Out Man",       # Lvl 13
         "Hothead",           # Lvl 18
         "Living Armor",      # Lvl 23
-        "The Pawn",          # Lvl 28
+        "What a Rush",       # Lvl 28
         "Mnemonic",          # Lvl 33
     ],
     Archetype.BATTLEMAGE: [
@@ -327,50 +494,50 @@ ARCHETYPE_TALENTS: Dict[Archetype, List[str]] = {
         "Opportunist",       # Lvl 3
         "Torturer",          # Lvl 8
         "Savage Sortilege",  # Lvl 13
-        "Picture of Health", # Lvl 18
+        "Picture of Health", # Lvl 18 (Warfare 1)
         "Living Armor",      # Lvl 23
-        "Executioner",       # Lvl 28
+        "Executioner",       # Lvl 28 (Warfare 1)
         "Hothead",           # Lvl 33
     ],
     Archetype.CLERIC: [
         "Elemental Affinity",# Lvl 1
         "Living Armor",      # Lvl 3
         "Torturer",          # Lvl 8
-        "Picture of Health", # Lvl 13
-        "Opportunist",       # Lvl 18
-        "Far Out Man",       # Lvl 23
-        "Hothead",           # Lvl 28
-        "Comeback Kid",      # Lvl 33
+        "Far Out Man",       # Lvl 13
+        "Hothead",           # Lvl 18
+        "Comeback Kid",      # Lvl 23
+        "What a Rush",       # Lvl 28
+        "Mnemonic",          # Lvl 33
     ],
     Archetype.SUMMONER: [
         "Elemental Affinity",# Lvl 1
         "Far Out Man",       # Lvl 3
-        "The Pawn",          # Lvl 8
+        "Torturer",          # Lvl 8
         "Hothead",           # Lvl 13
-        "Torturer",          # Lvl 18
-        "Living Armor",      # Lvl 23
-        "Mnemonic",          # Lvl 28
+        "Living Armor",      # Lvl 18
+        "Mnemonic",          # Lvl 23
+        "What a Rush",       # Lvl 28
         "Comeback Kid",      # Lvl 33
     ],
     Archetype.BOSS: [
         "Opportunist",       # Lvl 1
         "Walk It Off",       # Lvl 3 - Authentic DOS2 campaign boss talent: reduces status durations by 1 turn
-        "Executioner",       # Lvl 8
-        "Torturer",          # Lvl 13
-        "Living Armor",      # Lvl 18
-        "Picture of Health", # Lvl 23
+        "Executioner",       # Lvl 8 (Warfare 1)
+        "Living Armor",      # Lvl 13
+        "Torturer",          # Lvl 18
+        "Picture of Health", # Lvl 23 (Warfare 1)
         "Savage Sortilege",  # Lvl 28
         "Comeback Kid",      # Lvl 33
     ],
     Archetype.MINION: [
         "Opportunist",       # Lvl 1
-        "The Pawn",          # Lvl 3
-        "What a Rush",       # Lvl 8
-        "Duck Duck Goose",   # Lvl 13
-        "Hothead",           # Lvl 18
-        "Comeback Kid",      # Lvl 23
-        "Torturer",          # Lvl 28
-        "Executioner",       # Lvl 33
+        "What a Rush",       # Lvl 3
+        "Torturer",          # Lvl 8
+        "Hothead",           # Lvl 13
+        "Comeback Kid",      # Lvl 18
+        "Living Armor",      # Lvl 23
+        "Mnemonic",          # Lvl 28
+        "Far Out Man",       # Lvl 33
     ],
 }
 
@@ -378,24 +545,75 @@ ARCHETYPE_TALENTS: Dict[Archetype, List[str]] = {
 def calculate_talents(
     archetype: Archetype,
     level: int,
-    race: Optional[Race] = None
+    race: Optional[Race] = None,
+    combat_abilities: Optional[Dict[str, int]] = None,
+    class_archetype: Optional[Archetype] = None,
+    equipment: Optional[str] = None,
+    ai_tactics: Optional[str] = None,
+    preferred_talents: Optional[List[str]] = None,
 ) -> List[str]:
     """
-    Assigns appropriate DOS2 talents based on archetype, level, and race.
+    Assigns appropriate DOS2 talents based on archetype, level, race, combat ability prerequisites,
+    equipment, AI tactics, and class archetype.
     1 talent point is awarded at levels 1, 3, 8, 13, 18, 23, 28, 33.
+    Strictly verifies combat ability requirements (e.g. Warfare 1 for Executioner/Picture of Health).
     Characters also receive their innate racial talent (such as 'Undead' for all Undead).
     """
     pts = get_talent_points_for_level(level)
 
-    priority_list = ARCHETYPE_TALENTS.get(archetype, ARCHETYPE_TALENTS[Archetype.FIGHTER])
-    if archetype == Archetype.BOSS:
-        count = min(len(priority_list), max(3, pts + 1))
-    elif archetype == Archetype.MINION:
-        count = min(len(priority_list), max(0, pts - 1))
-    else:
-        count = min(len(priority_list), pts)
+    abilities = dict(combat_abilities) if combat_abilities is not None else calculate_combat_abilities(
+        level, archetype, class_archetype=class_archetype
+    )
 
-    talents = list(priority_list[:count])
+    if archetype == Archetype.BOSS:
+        target_count = min(8, max(3, pts + 1))
+    elif archetype == Archetype.MINION:
+        target_count = min(8, max(0, pts - 1))
+    else:
+        target_count = min(8, pts)
+
+    preferred: List[str] = []
+    if preferred_talents:
+        for t in preferred_talents:
+            if t in ALL_GAME_TALENTS and t not in preferred:
+                preferred.append(t)
+
+    if ai_tactics:
+        # Detect any authentic talent explicitly mentioned in AI tactics
+        for t in ALL_GAME_TALENTS:
+            if re.search(r'\b' + re.escape(t) + r'\b', ai_tactics, re.IGNORECASE):
+                if t not in preferred:
+                    preferred.append(t)
+
+    candidates: List[str] = list(preferred)
+    if archetype == Archetype.BOSS:
+        if "Walk It Off" not in candidates:
+            candidates.append("Walk It Off")
+        active_arch = class_archetype if (class_archetype and class_archetype in ARCHETYPE_TALENTS) else Archetype.BOSS
+        for t in ARCHETYPE_TALENTS.get(active_arch, ARCHETYPE_TALENTS[Archetype.BOSS]):
+            if t not in candidates:
+                candidates.append(t)
+    else:
+        for t in ARCHETYPE_TALENTS.get(archetype, ARCHETYPE_TALENTS[Archetype.FIGHTER]):
+            if t not in candidates:
+                candidates.append(t)
+
+    # Universal fallbacks if candidates fail prerequisite checks
+    universal_fallbacks = [
+        "Hothead", "Torturer", "Living Armor", "What a Rush", "Comeback Kid",
+        "Far Out Man", "Mnemonic", "Savage Sortilege", "Elemental Affinity",
+        "Unstable", "Escapist"
+    ]
+    for t in universal_fallbacks:
+        if t not in candidates:
+            candidates.append(t)
+
+    talents: List[str] = []
+    for cand in candidates:
+        if len(talents) >= target_count:
+            break
+        if is_talent_compatible(cand, talents, combat_abilities=abilities, level=level, equipment=equipment):
+            talents.append(cand)
 
     if race is not None:
         is_undead = race in (
@@ -498,7 +716,13 @@ def calculate_enemy_stats(
         ap_max = 6    # Fixed at 6 in GM mode
         ap_recovery = 4  # Standard minion recovery (3-4 in GM mode)
 
-    talents = calculate_talents(archetype, level, race=race)
+    talents = calculate_talents(
+        archetype,
+        level,
+        race=race,
+        combat_abilities=abilities,
+        class_archetype=class_archetype
+    )
 
     return EnemyStats(
         vitality=max(15, calculated_vitality),

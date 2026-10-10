@@ -27,6 +27,8 @@ from .formulas import (
     get_base_vitality,
     get_base_armor,
     sync_stats_with_combat_abilities,
+    calculate_talents,
+    validate_and_filter_talents,
 )
 from .skills_db import get_skills_for_archetype
 from .bestiary import (
@@ -741,6 +743,18 @@ def _create_npc(
     if leadership_bonus > 0:
         stats.combat_abilities["Leadership"] = max(stats.combat_abilities.get("Leadership", 0), leadership_bonus)
 
+    # Calculate talents tailored to final combat abilities, class style, equipment, and AI tactics
+    stats.talents = calculate_talents(
+        actual_archetype,
+        level,
+        race=template.race,
+        combat_abilities=stats.combat_abilities,
+        class_archetype=class_style,
+        equipment=template.equipment,
+        ai_tactics=template.ai_tactics,
+        preferred_talents=getattr(template, "signature_talents", None)
+    )
+
     # For Bosses, grant Walk It Off (anti-chain-CC) and for Solo Bosses grant Comeback Kid & What a Rush
     if actual_archetype == Archetype.BOSS:
         if "Walk It Off" not in stats.talents:
@@ -749,6 +763,14 @@ def _create_npc(
             for t in ["Comeback Kid", "What a Rush"]:
                 if t not in stats.talents:
                     stats.talents.append(t)
+
+    # Strictly filter and validate against combat ability prerequisites, mutual exclusions, and equipment
+    stats.talents = validate_and_filter_talents(
+        stats.talents,
+        combat_abilities=stats.combat_abilities,
+        level=level,
+        equipment=template.equipment
+    )
 
     # Asymmetric Armor & Elemental Weakness Profiles (Point 3)
     defense_theme = ""

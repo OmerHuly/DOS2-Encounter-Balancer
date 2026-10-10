@@ -33,6 +33,9 @@ from balancer_core import (
     DEFENSE_PROFILES,
     DefenseProfile,
     calculate_boss_scaling,
+    ALL_GAME_TALENTS,
+    ARCHETYPE_TALENTS,
+    RACIAL_TALENTS,
 )
 from balancer_core.exporter import format_enemy_terminal_card
 from balancer_core.skills_db import (
@@ -577,6 +580,81 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
             )
             self.assertEqual(len(set(lvl18_talents)), 5, "Talents must be unique")
 
+    def test_authentic_talents_registry_and_no_back_to_the_wall(self):
+        """Verify that 'Back-to-the-Wall', Divine/Gift Bag talents, and Story/Quest talents do not exist in GM mode,
+        that authentic GM mode talents including 'Dwarven Guile' and all racial passives are present,
+        and every archetype talent in ARCHETYPE_TALENTS is an authentic GM mode talent in ALL_GAME_TALENTS."""
+        # Non-authentic / obsolete talents must not be present
+        self.assertNotIn("Back-to-the-Wall", ALL_GAME_TALENTS)
+        self.assertNotIn("Elemental Ranger", ALL_GAME_TALENTS)
+
+        # Divine / Gift Bag talents unavailable in GM mode must not be present
+        unavailable_divine_talents = [
+            "Gladiator",
+            "Greedy Vessel",
+            "Greedy Grenadier",
+            "Haymaker",
+            "Indomitable",
+            "Magic Cycles",
+            "Master Thief",
+            "Sadist",
+            "Soulcatcher",
+        ]
+        for dt in unavailable_divine_talents:
+            self.assertNotIn(dt, ALL_GAME_TALENTS, f"Divine talent '{dt}' must not be in GM mode ALL_GAME_TALENTS")
+
+        # Quest / Story talents unavailable in GM mode must not be present
+        unavailable_story_talents = [
+            "Rooted",
+            "Spider's Kiss",
+            "Trader's Secrets",
+        ]
+        for st in unavailable_story_talents:
+            self.assertNotIn(st, ALL_GAME_TALENTS, f"Story talent '{st}' must not be in GM mode ALL_GAME_TALENTS")
+
+        # Essential authentic racial talents available in GM mode must be present
+        self.assertIn("Dwarven Guile", ALL_GAME_TALENTS)
+        self.assertIn("Ancestral Knowledge", ALL_GAME_TALENTS)
+        self.assertIn("Thrifty", ALL_GAME_TALENTS)
+        self.assertIn("Sturdy", ALL_GAME_TALENTS)
+        self.assertIn("Ingenious", ALL_GAME_TALENTS)
+        self.assertIn("Sophisticated", ALL_GAME_TALENTS)
+        self.assertIn("Spellsong", ALL_GAME_TALENTS)
+        self.assertIn("Corpse Eater", ALL_GAME_TALENTS)
+        self.assertIn("Undead", ALL_GAME_TALENTS)
+
+        # RACIAL_TALENTS mapping verification
+        self.assertEqual(RACIAL_TALENTS[Race.DWARF], ["Sturdy", "Dwarven Guile"])
+        self.assertEqual(RACIAL_TALENTS[Race.HUMAN], ["Ingenious", "Thrifty"])
+        self.assertEqual(RACIAL_TALENTS[Race.ELF], ["Corpse Eater", "Ancestral Knowledge"])
+        self.assertEqual(RACIAL_TALENTS[Race.LIZARD], ["Sophisticated", "Spellsong"])
+        for r, t_list in RACIAL_TALENTS.items():
+            for t in t_list:
+                self.assertIn(t, ALL_GAME_TALENTS, f"Racial talent '{t}' for {r} must be in ALL_GAME_TALENTS")
+
+        # Archetype talents verification
+        for arch, talent_list in ARCHETYPE_TALENTS.items():
+            for talent_name in talent_list:
+                self.assertNotEqual(
+                    talent_name, "Back-to-the-Wall",
+                    f"Archetype {arch} must not have 'Back-to-the-Wall'"
+                )
+                self.assertIn(
+                    talent_name, ALL_GAME_TALENTS,
+                    f"Archetype {arch} talent '{talent_name}' must be in ALL_GAME_TALENTS"
+                )
+
+        # Also verify that generated enemy talents (stripping parenthetical info) belong to ALL_GAME_TALENTS
+        for arch in Archetype:
+            for lvl in [1, 5, 10, 15, 20]:
+                talents = calculate_talents(arch, level=lvl)
+                for t in talents:
+                    base_talent = t.split(" (")[0]
+                    self.assertIn(
+                        base_talent, ALL_GAME_TALENTS,
+                        f"Generated talent '{base_talent}' for {arch} at level {lvl} must be in ALL_GAME_TALENTS"
+                    )
+
     def test_all_undead_races_receive_undead_talent(self):
         """Verify that all Undead races (Generic, Human, Elf, Dwarf, Lizard) receive the Undead talent."""
         all_undead_races = [
@@ -1116,6 +1194,74 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
                 self.assertLessEqual(enemy.stats.ap_recovery, 6)
 
 
+    def test_bandit_elf_elementalist_talents(self):
+        """Verify Bandit Elf Elementalist receives Elemental Affinity and respects Warfare/Equipment prerequisites."""
+        party = PartyConfig(level=9, party_size=4, difficulty=Difficulty.BALANCED)
+        enc = generate_encounter(party, encounter_type=EncounterType.BOSS, boss_template="Bandit Elf Elementalist", minion_count=3, seed=42)
+        boss = enc.enemies[0]
+
+        # 1. Elemental Affinity must be selected to match AI tactics and Mage archetype
+        self.assertIn("Elemental Affinity", boss.stats.talents)
+
+        # 2. Warfare-gated talents must NOT be selected because boss has 0 Warfare
+        self.assertEqual(boss.stats.combat_abilities.get("Warfare", 0), 0)
+        self.assertNotIn("Executioner", boss.stats.talents)
+        self.assertNotIn("Picture of Health", boss.stats.talents)
+
+        # 3. Opportunist must NOT be selected because boss is equipped with a Hydro Wand + Shield
+        self.assertNotIn("Opportunist", boss.stats.talents)
+
+        # 4. Boss survival and racial talents must be present
+        self.assertIn("Walk It Off", boss.stats.talents)
+        self.assertIn("Corpse Eater", boss.stats.talents)
+
+        # 5. AI Tactics must specify fire Elemental Affinity via Ignition (not blood for fire spells)
+        self.assertIn("Ignition", boss.ai_tactics)
+        self.assertNotIn("blood puddle, then casts Elemental Affinity", boss.ai_tactics)
+
+    def test_combat_ability_talent_prerequisites_enforced(self):
+        """Verify combat ability prerequisites and mutual exclusions across generated encounters."""
+        party = PartyConfig(level=8, party_size=4)
+        for faction in [Faction.BANDITS, Faction.MAGISTERS, Faction.UNDEAD, Faction.DEMONS]:
+            for enc_type in [EncounterType.STANDARD, EncounterType.BOSS, EncounterType.SWARM, EncounterType.ELITE]:
+                enc = generate_encounter(party, encounter_type=enc_type, faction=faction, seed=101)
+                for enemy in enc.enemies:
+                    talents = enemy.stats.talents
+                    abilities = enemy.stats.combat_abilities
+
+                    # Warfare 1 prerequisites
+                    if "Executioner" in talents:
+                        self.assertGreaterEqual(abilities.get("Warfare", 0), 1, f"{enemy.name} has Executioner without Warfare")
+                    if "Picture of Health" in talents:
+                        self.assertGreaterEqual(abilities.get("Warfare", 0), 1, f"{enemy.name} has Picture of Health without Warfare")
+
+                    # Scoundrel 1 prerequisite
+                    if "The Pawn" in talents:
+                        self.assertGreaterEqual(abilities.get("Scoundrel", 0), 1, f"{enemy.name} has The Pawn without Scoundrel")
+
+                    # Huntsman 1 prerequisites
+                    if "Duck Duck Goose" in talents:
+                        self.assertGreaterEqual(abilities.get("Huntsman", 0), 1, f"{enemy.name} has Duck Duck Goose without Huntsman")
+                    self.assertNotIn("Elemental Ranger", talents, f"{enemy.name} must not have Elemental Ranger")
+
+                    # Magic school prerequisites
+                    if "Demon" in talents:
+                        self.assertGreaterEqual(abilities.get("Pyrokinetic", 0), 1, f"{enemy.name} has Demon without Pyrokinetic")
+                    if "Ice King" in talents:
+                        self.assertGreaterEqual(abilities.get("Hydrosophist", 0), 1, f"{enemy.name} has Ice King without Hydrosophist")
+
+                    # Mutual exclusions
+                    self.assertFalse(
+                        "Executioner" in talents and "The Pawn" in talents,
+                        f"{enemy.name} has both Executioner and The Pawn"
+                    )
+                    self.assertFalse(
+                        "Demon" in talents and "Ice King" in talents,
+                        f"{enemy.name} has both Demon and Ice King"
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
+
+

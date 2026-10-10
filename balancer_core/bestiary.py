@@ -28,6 +28,7 @@ class BestiaryTemplate:
     can_be_boss: bool = False
     can_be_minion: bool = False
     signature_skills: Optional[List[str]] = None
+    signature_talents: Optional[List[str]] = None
 
 
 BESTIARY: List[BestiaryTemplate] = [
@@ -146,7 +147,8 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Dual Serrated Dwarven Daggers",
         ai_tactics="Flanks with The Pawn, applies Petrifying Touch to vulnerable targets, and backstabs backline casters.",
         gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A (Rogue/Assassin variant).",
-        can_be_minion=False
+        can_be_minion=False,
+        signature_talents=["The Pawn"]
     ),
     BestiaryTemplate(
         name="Bandit Dwarven Warlord",
@@ -201,9 +203,11 @@ BESTIARY: List[BestiaryTemplate] = [
         race=Race.ELF,
         archetype=Archetype.MAGE,
         equipment="Hydro Wand + Shield",
-        ai_tactics="Uses Flesh Sacrifice to create blood puddle, then casts Elemental Affinity spells at reduced AP cost.",
-        gm_notes="Engine template: Elves_Female_Armor_Mage. Leverages blood surface synergy.",
-        can_be_minion=False
+        ai_tactics="Uses Flesh Sacrifice for bonus AP and damage, ignites ground with Ignition to trigger fire Elemental Affinity, and casts Fireball and Laser Ray at reduced AP cost.",
+        gm_notes="Engine template: Elves_Female_Armor_Mage. Leverages fire surface synergy.",
+        can_be_boss=True,
+        can_be_minion=False,
+        signature_talents=["Elemental Affinity"]
     ),
     BestiaryTemplate(
         name="Bandit Elven Captain",
@@ -1128,22 +1132,26 @@ def create_custom_boss_template(
     equipment = "Masterwork Weaponry & Enchanted Armor"
     ai_tactics = "Focuses key targets, utilizes devastating area-of-effect abilities, and controls the battlefield."
     sig_skills = None
+    sig_talents = None
 
     if any(k in q for k in ["rogue", "assassin", "shadowblade", "cutthroat", "dagger"]):
         detected_archetype = Archetype.ROGUE
         equipment = "Twin Masterwork Dragon-Bone Daggers" if "lizard" in q else "Twin Masterwork Obsidian Daggers"
         ai_tactics = "Lethal shadowblade assassin. Teleports with Cloak and Dagger, backstabs with Backlash and Rupture Tendons, and vanishes with Chameleon Cloak."
         sig_skills = ["Backlash", "Cloak and Dagger", "Rupture Tendons", "Adrenaline", "Chameleon Cloak"]
+        sig_talents = ["The Pawn"]
     elif any(k in q for k in ["ranger", "archer", "marksman", "hunter", "sniper", "bow"]):
         detected_archetype = Archetype.RANGER
         equipment = "Masterwork Composite Bow"
         ai_tactics = "Deadly long-range sniper. Seeks high ground (+20% damage), pins down players, and fires Ricochet and Barrage."
         sig_skills = ["Ricochet", "Pin Down", "First Aid", "Sky Shot"]
+        sig_talents = ["Duck Duck Goose"]
     elif any(k in q for k in ["mage", "wizard", "sorcerer", "elementalist", "pyro"]):
         detected_archetype = Archetype.MAGE
         equipment = "Enchanted Pyromancy Staff"
         ai_tactics = "Devastating spellcaster. Casts high-impact elemental spells and coats the battlefield in surfaces."
         sig_skills = ["Fireball", "Searing Daggers", "Ignition", "Peace of Mind"]
+        sig_talents = ["Elemental Affinity"]
 
     return BestiaryTemplate(
         name=name.strip(),
@@ -1156,5 +1164,6 @@ def create_custom_boss_template(
         gm_notes=f"Forcefully designated GM Boss: {name.strip()}. Custom narrative centerpiece.",
         can_be_boss=True,
         signature_skills=sig_skills,
+        signature_talents=sig_talents,
     )
 

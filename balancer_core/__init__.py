@@ -24,6 +24,13 @@ from .formulas import (
     estimate_party_ehp,
     get_base_vitality,
     get_base_armor,
+    ALL_GAME_TALENTS,
+    ARCHETYPE_TALENTS,
+    RACIAL_TALENTS,
+    TALENT_PREREQUISITES,
+    TALENT_INCOMPATIBILITIES,
+    is_talent_compatible,
+    validate_and_filter_talents,
 )
 from .bestiary import (
     BESTIARY,
@@ -65,6 +72,9 @@ __all__ = [
     "estimate_party_ehp",
     "get_base_vitality",
     "get_base_armor",
+    "ALL_GAME_TALENTS",
+    "ARCHETYPE_TALENTS",
+    "RACIAL_TALENTS",
     "BESTIARY",
     "get_templates_by_faction",
     "get_all_boss_templates",
