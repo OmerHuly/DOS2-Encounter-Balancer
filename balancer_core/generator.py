@@ -264,6 +264,8 @@ class BossScalingProfile:
     scaling_description: str
     boss_perseverance: int = 4
     boss_leadership: int = 0
+    boss_ap_recovery: int = 6
+    minion_ap_recovery: int = 4
 
 
 @dataclass
@@ -380,8 +382,9 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
     """
     Computes precise mathematical durability, attribute, and tactical scaling
     for a boss encounter based on the GM's chosen minion count (0 to 5).
-    Strictly adheres to DOS2 GM Mode limits (max 6 Start AP, max 4 Recovery AP).
+    Strictly adheres to DOS2 GM Mode limits (fixed 4 Start AP, fixed 6 Max AP, and 0-6 Turn AP).
     Balancing is achieved through:
+    - AP per turn slider (0-6 recovery AP configured on the boss Character Sheet)
     - Durability buffers (Armor and Vitality multipliers)
     - Primary attribute scaling (STR/FIN/INT +5% base dmg per pt)
     - Constitution (+7% vitality per pt)
@@ -404,9 +407,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.0,
                 minion_level_offset=0,
                 minion_max_slots=3,
-                scaling_description="Solo Boss Duel (Lone Wolf): Adheres to GM Mode AP limits (6 Start / 4 Recovery AP). Durability (+45% armor, +35% HP), +STR/INT damage, and Perseverance 5 counter 2-player Lone Wolf burst.",
+                scaling_description="Solo Boss Duel (Lone Wolf): Fixed 4 Start AP / 6 Max AP, tuned with +6 AP/turn slider. Durability (+45% armor, +35% HP), +STR/INT damage, and Perseverance 5 counter 2-player Lone Wolf burst.",
                 boss_perseverance=5,
                 boss_leadership=0,
+                boss_ap_recovery=6,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -422,9 +427,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.0,
                 minion_level_offset=0,
                 minion_max_slots=3,
-                scaling_description="Solo Overlord Duel (0 Minions): Strictly respects GM Mode AP limits (6 Start / 4 Recovery AP). Durability (+65% armor, +50% HP), Retribution 3, and Perseverance 5 (restores 25% armor on CC recovery) balance against 4v1 party turns.",
+                scaling_description="Solo Overlord Duel (0 Minions): Fixed 4 Start AP / 6 Max AP, tuned with +6 AP/turn slider. Durability (+65% armor, +50% HP), Retribution 3, and Perseverance 5 (restores 25% armor on CC recovery) balance against 4v1 party turns.",
                 boss_perseverance=5,
                 boss_leadership=0,
+                boss_ap_recovery=6,
+                minion_ap_recovery=4,
             )
     elif minion_count == 1:
         if is_lone_wolf:
@@ -441,9 +448,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.05,
                 minion_level_offset=0,
                 minion_max_slots=4,
-                scaling_description="Duo Boss Encounter (Lone Wolf): GM AP caps enforced (6 Start / 4 Recovery AP). Boss and lieutenant tuned for a tight 2v2 tactical duel with Leadership 2 aura.",
+                scaling_description="Duo Boss Encounter (Lone Wolf): Fixed 4 Start AP / 6 Max AP with +5 AP/turn on boss. Boss and lieutenant tuned for a tight 2v2 tactical duel with Leadership 2 aura.",
                 boss_perseverance=4,
                 boss_leadership=2,
+                boss_ap_recovery=5,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -459,9 +468,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.10,
                 minion_level_offset=0,
                 minion_max_slots=4,
-                scaling_description="Boss & Elite Lieutenant Duo (1 Minion): GM AP limits enforced (6 Start / 4 Recovery AP). Elevated boss armor (+30%), Perseverance 4, and Leadership 2 aura protect the lieutenant.",
+                scaling_description="Boss & Elite Lieutenant Duo (1 Minion): Fixed 4 Start AP / 6 Max AP with +6 AP/turn on boss. Elevated boss armor (+30%), Perseverance 4, and Leadership 2 aura protect the lieutenant.",
                 boss_perseverance=4,
                 boss_leadership=2,
+                boss_ap_recovery=6,
+                minion_ap_recovery=4,
             )
     elif minion_count == 2:
         if is_lone_wolf:
@@ -478,9 +489,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.00,
                 minion_level_offset=-1,
                 minion_max_slots=3,
-                scaling_description="Standard Lone Wolf Boss Encounter: Calibrated baseline 1 Boss + 2 Minions matching Lone Wolf power within 4 AP recovery limits.",
+                scaling_description="Standard Lone Wolf Boss Encounter: Calibrated baseline 1 Boss + 2 Minions matching Lone Wolf power (fixed 4 Start AP / 6 Max AP, +4 AP/turn).",
                 boss_perseverance=4,
                 boss_leadership=3,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -496,9 +509,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.00,
                 minion_level_offset=0,
                 minion_max_slots=3,
-                scaling_description="Tightly Guarded Boss Trio: 2 minions. Modest durability buffer (+15% boss armor), Perseverance 4, and Leadership 3 aura match 4 player turns.",
+                scaling_description="Tightly Guarded Boss Trio: 2 minions. Modest durability buffer (+15% boss armor), +5 AP/turn, Perseverance 4, and Leadership 3 aura match 4 player turns.",
                 boss_perseverance=4,
                 boss_leadership=3,
+                boss_ap_recovery=5,
+                minion_ap_recovery=4,
             )
     elif minion_count == 3:
         if is_lone_wolf:
@@ -515,9 +530,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=0.90,
                 minion_level_offset=-1,
                 minion_max_slots=3,
-                scaling_description="Pressure Squad (Lone Wolf): 3 minions; durability trimmed (-10% boss armor) to prevent action economy overwhelm against 2 heroes.",
+                scaling_description="Pressure Squad (Lone Wolf): 3 minions; durability trimmed (-10% boss armor) to prevent action economy overwhelm against 2 heroes (fixed 4 Start AP / 6 Max AP, +4 AP/turn).",
                 boss_perseverance=4,
                 boss_leadership=3,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -533,9 +550,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=1.00,
                 minion_level_offset=-1,
                 minion_max_slots=3,
-                scaling_description="Classic Boss Squad: Standard 1 Boss + 3 Minions providing authentic round-robin tactical tempo at standard GM caps (Perseverance 4, Leadership 3).",
+                scaling_description="Classic Boss Squad: Standard 1 Boss + 3 Minions providing authentic round-robin tactical tempo at standard GM caps (fixed 4 Start AP / 6 Max AP, +4 AP/turn, Perseverance 4, Leadership 3).",
                 boss_perseverance=4,
                 boss_leadership=3,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
     elif minion_count == 4:
         if is_lone_wolf:
@@ -552,9 +571,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=0.80,
                 minion_level_offset=-1,
                 minion_max_slots=2,
-                scaling_description="Heavy Minion Swarm (Lone Wolf): 4 minions; enemy durability heavily reduced to prevent overwhelming Lone Wolf players.",
+                scaling_description="Heavy Minion Swarm (Lone Wolf): 4 minions; enemy durability heavily reduced to prevent overwhelming Lone Wolf players (fixed 4 Start AP / 6 Max AP, +4 AP/turn).",
                 boss_perseverance=3,
                 boss_leadership=4,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -570,9 +591,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=0.85,
                 minion_level_offset=-1,
                 minion_max_slots=3,
-                scaling_description="Heavy Minion Guard: 4 minions create high action economy (20 enemy AP). Boss (-12% armor) and minions (-20% armor) softened; boss radiates Leadership 4.",
+                scaling_description="Heavy Minion Guard: 4 minions create high action economy (20 enemy AP). Boss (-12% armor) and minions (-20% armor) softened; boss radiates Leadership 4 (fixed 4 Start AP / 6 Max AP, +4 AP/turn).",
                 boss_perseverance=3,
                 boss_leadership=4,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
     else:  # minion_count == 5
         if is_lone_wolf:
@@ -589,9 +612,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=0.70,
                 minion_level_offset=-1,
                 minion_max_slots=2,
-                scaling_description="Maximum Minion Horde (Lone Wolf): 5 minions. Enemy stats trimmed down (-28% boss armor, -35% minion armor) to maintain tactical viability.",
+                scaling_description="Maximum Minion Horde (Lone Wolf): 5 minions. Enemy stats trimmed down (-28% boss armor, -35% minion armor) to maintain tactical viability (fixed 4 Start AP / 6 Max AP, +4 AP/turn).",
                 boss_perseverance=3,
                 boss_leadership=4,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
         else:
             return BossScalingProfile(
@@ -607,9 +632,11 @@ def calculate_boss_scaling(minion_count: int, is_lone_wolf: bool) -> BossScaling
                 minion_vitality_mult=0.75,
                 minion_level_offset=-1,
                 minion_max_slots=2,
-                scaling_description="Full Minion Swarm Boss Battle: 5 minions (6 enemies, 24 enemy AP). Boss (-22% armor, Leadership 4) and minions (-30% armor, -25% HP) scaled as swarmer cannon-fodder, rewarding wide AoE clearance (Fireball, Earthquake, Ricochet).",
+                scaling_description="Full Minion Swarm Boss Battle: 5 minions (6 enemies, 24 enemy AP). Boss (-22% armor, Leadership 4) and minions (-30% armor, -25% HP) scaled as swarmer cannon-fodder, rewarding wide AoE clearance (Fireball, Earthquake, Ricochet). Fixed 4 Start AP / 6 Max AP, +4 AP/turn.",
                 boss_perseverance=3,
                 boss_leadership=4,
+                boss_ap_recovery=4,
+                minion_ap_recovery=4,
             )
 
 
@@ -630,6 +657,7 @@ def _create_npc(
     perseverance_bonus: int = 0,
     leadership_bonus: int = 0,
     defense_profile_name: Optional[str] = None,
+    ap_recovery: Optional[int] = None,
 ) -> NPC:
     actual_archetype = archetype or template.archetype
     class_style = template.archetype if template.archetype not in (Archetype.BOSS, Archetype.MINION) else None
@@ -677,10 +705,15 @@ def _create_npc(
         class_archetype=class_style
     )
 
-    # Enforce GM mode hard limits on AP
-    stats.ap_start = min(6, stats.ap_start)
-    stats.ap_max = min(6, stats.ap_max)
-    stats.ap_recovery = min(4, stats.ap_recovery)
+    if ap_recovery is not None:
+        stats.ap_recovery = ap_recovery
+
+    # Enforce GM mode hard limits on AP:
+    # Starting AP is fixed at 4; Maximum AP is fixed at 6.
+    # AP per turn (recovery) can be adjusted from 0 to 6.
+    stats.ap_start = 4
+    stats.ap_max = 6
+    stats.ap_recovery = min(6, max(0, stats.ap_recovery))
 
     if armor_multiplier != 1.0:
         stats.physical_armor = int(stats.physical_armor * armor_multiplier)
@@ -768,7 +801,7 @@ def generate_encounter(
     Generates a complete, balanced DOS2 GM mode encounter with exact stats,
     skills, gear, terrain, and balance analytics.
     Allows specifying boss NPC (by template, name, or custom string) and minion count (0 to 5)
-    with automatic tactical and durability balancing strictly within GM mode AP limitations (max 6 Start / 4 Recovery AP).
+    with automatic tactical and durability balancing strictly within GM mode AP limitations (fixed 4 Start AP / 6 Max AP, 0-6 AP/turn).
     """
     if seed is not None:
         random.seed(seed)
@@ -897,6 +930,7 @@ def generate_encounter(
             perseverance_bonus=scaling.boss_perseverance,
             leadership_bonus=scaling.boss_leadership,
             defense_profile_name=defense_profile,
+            ap_recovery=scaling.boss_ap_recovery,
         ))
         
         # Minions (0 to 5)
@@ -920,6 +954,7 @@ def generate_encounter(
                 max_slots=scaling.minion_max_slots,
                 armor_multiplier=scaling.minion_armor_mult,
                 vitality_multiplier=scaling.minion_vitality_mult,
+                ap_recovery=scaling.minion_ap_recovery,
             ))
 
     elif encounter_type == EncounterType.SWARM:

@@ -481,20 +481,22 @@ def calculate_enemy_stats(
     if difficulty in (Difficulty.TACTICIAN, Difficulty.DEADLY):
         initiative += 2
 
-    # AP Economy
+    # AP Economy in DOS2 GM Mode:
+    # Starting AP is fixed at 4; Maximum AP is fixed at 6.
+    # AP per turn (recovery) can be configured by the GM from 0 to 6.
     ap_start = 4
     ap_max = 6
     ap_recovery = 4
     if archetype == Archetype.BOSS:
-        ap_start = 6
-        ap_max = 6
-        ap_recovery = 4  # GM mode limitation: cannot set more than 6 start AP and 4 AP recovery
+        ap_start = 4  # Fixed at 4 in GM mode
+        ap_max = 6    # Fixed at 6 in GM mode
+        ap_recovery = 6  # GM Mode: AP per turn is controllable up to 6; bosses utilize elevated AP/rnd
         if "Perseverance" not in abilities:
             abilities["Perseverance"] = 3  # Anti-chain-CC buffer (restores 15% armor on CC recovery)
     elif archetype == Archetype.MINION:
-        ap_start = 3
-        ap_max = 4
-        ap_recovery = 3
+        ap_start = 4  # Fixed at 4 in GM mode
+        ap_max = 6    # Fixed at 6 in GM mode
+        ap_recovery = 4  # Standard minion recovery (3-4 in GM mode)
 
     talents = calculate_talents(archetype, level, race=race)
 

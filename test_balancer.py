@@ -91,7 +91,8 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         boss = enc.enemies[0]
         self.assertEqual(boss.archetype, Archetype.BOSS)
         self.assertEqual(boss.level, 6)  # Level + 1
-        self.assertEqual(boss.stats.ap_start, 6)
+        self.assertEqual(boss.stats.ap_start, 4)
+        self.assertEqual(boss.stats.ap_max, 6)
         self.assertEqual(boss.stats.ap_recovery, 4)
         
         # Verify boss is significantly tankier than regular minions
@@ -171,7 +172,7 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertTrue(os.path.exists(md_file))
         with open(md_file, "r", encoding="utf-8") as f:
             content = f.read()
-        self.assertIn("# ⚔️ DOS2 GM Battle Sheet:", content)
+        self.assertIn("# DOS2 GM Battle Sheet:", content)
         self.assertIn("Bandits & Outlaws", content)
         
         # Cleanup
@@ -644,9 +645,10 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertEqual(len(enc.enemies), 1)
         boss = enc.enemies[0]
         self.assertEqual(boss.title, "Solo Boss / Overlord")
-        # Enforces GM Mode AP caps (6 Start / 4 Recovery AP)
-        self.assertEqual(boss.stats.ap_start, 6)
-        self.assertEqual(boss.stats.ap_recovery, 4)
+        # Enforces GM Mode AP caps (Fixed 4 Start AP / 6 Max AP, +6 Turn AP slider)
+        self.assertEqual(boss.stats.ap_start, 4)
+        self.assertEqual(boss.stats.ap_max, 6)
+        self.assertEqual(boss.stats.ap_recovery, 6)
         # Alternative balance levers: Talents, Retribution, Attribute scaling
         self.assertIn("Comeback Kid", boss.stats.talents)
         self.assertIn("What a Rush", boss.stats.talents)
@@ -729,8 +731,9 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertEqual(boss.name, "Pack Wolf")
         self.assertEqual(boss.archetype, Archetype.BOSS)
         self.assertEqual(boss.title, "Boss / Commander")
-        self.assertEqual(boss.stats.ap_start, 6)
-        self.assertEqual(boss.stats.ap_recovery, 4)
+        self.assertEqual(boss.stats.ap_start, 4)
+        self.assertEqual(boss.stats.ap_max, 6)
+        self.assertEqual(boss.stats.ap_recovery, 6)
 
     def test_minion_count_bounds_validation(self):
         """Verify that minion count outside [0, 5] raises a ValueError."""
@@ -876,8 +879,8 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         """Verify interactive wizard skips Faction and Race prompts when a Solo Boss (0 minions) with designated Boss NPC is chosen."""
         script_path = os.path.abspath("dos2_encounter_balancer.py")
         # Input sequence:
-        # 1. Level [4]: \n
-        # 2. Party size [4]: \n
+        # 1. Party size [4]: \n (default 4)
+        # 2. Level [1-25]: 4\n (required, no default)
         # 3. Damage comp [1]: \n
         # 4. Difficulty [1]: \n
         # 5. Encounter type: 3 (Boss Encounter)
@@ -886,7 +889,7 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         # 8. Choose Boss from Bestiary: 1 (Mountain Troll Brute)
         # 9. Defensive profile: \n (Auto-detect)
         # 10. GM Action: 4 (Exit)
-        inputs = "\n\n\n\n3\n0\n2\n1\n\n4\n"
+        inputs = "\n4\n\n\n3\n0\n2\n1\n\n4\n"
         res = subprocess.run(
             [sys.executable, script_path, "-i"],
             input=inputs,
@@ -964,8 +967,9 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertIn("Walk It Off", boss.stats.talents)
 
         # 6. GM AP limits enforced
-        self.assertLessEqual(boss.stats.ap_start, 6)
-        self.assertLessEqual(boss.stats.ap_recovery, 4)
+        self.assertEqual(boss.stats.ap_start, 4)
+        self.assertEqual(boss.stats.ap_max, 6)
+        self.assertEqual(boss.stats.ap_recovery, 5)
 
     def test_custom_lizard_rogue_boss_by_string(self):
         """Verify custom boss creation automatically detects Lizard Rogue from keywords."""
@@ -988,8 +992,130 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertIn("Walk It Off", boss.stats.talents)
         self.assertIn("Comeback Kid", boss.stats.talents)  # Solo boss talent
 
+    def test_interactive_mode_esc_key_exits_cleanly(self):
+        """Verify that hitting the ESC key at the very first prompt exits cleanly with code 0."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=chr(27) + "\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"ESC exit failed: {res.stderr}")
+        self.assertIn("May your dice roll true", res.stdout)
+
+    def test_interactive_mode_q_exits_cleanly(self):
+        """Verify that typing 'q' at any prompt exits cleanly with code 0."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input="q\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"'q' exit failed: {res.stderr}")
+        self.assertIn("May your dice roll true", res.stdout)
+
+    def test_interactive_mode_exit_at_intermediate_stage(self):
+        """Verify exiting cleanly mid-wizard at an intermediate prompt (e.g. Encounter Type)."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        # 1. Party Size [4]: Enter
+        # 2. Level [1-25]: 4
+        # 3. Damage: Enter
+        # 4. Difficulty: Enter
+        # 5. Encounter Type: 'exit'
+        inputs = "\n4\n\n\nexit\n"
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=inputs,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"Mid-wizard exit failed: {res.stderr}")
+        self.assertIn("May your dice roll true", res.stdout)
+
+    def test_interactive_mode_party_size_first_then_level_required(self):
+        """Verify prompt order: party size is prompted first, followed by party level without default."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        # 1. Party Size [4]: Enter (takes default 4)
+        # 2. Level: Enter (empty -> rejected with 'Input required')
+        # 3. Level: 'q' -> cleanly exits
+        inputs = "\n\nq\n"
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=inputs,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"Failed: {res.stderr}")
+        # Verify prompt order in output
+        size_idx = res.stdout.find("How many players are in the party? [4]")
+        level_idx = res.stdout.find("What level is the player party? [1-25]")
+        self.assertNotEqual(size_idx, -1, "Party size prompt not found in output")
+        self.assertNotEqual(level_idx, -1, "Level prompt not found in output")
+        self.assertLess(size_idx, level_idx, "Party size must be prompted before party level")
+        self.assertIn("Input required", res.stdout)
+
+    def test_prompt_input_msvcrt_esc_clean_exit(self):
+        """Verify prompt_input with mock msvcrt immediately triggers clean exit on ESC key."""
+        import io
+        from contextlib import redirect_stdout
+        from unittest.mock import patch, MagicMock
+        from dos2_encounter_balancer import prompt_input
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with patch("sys.stdin.isatty", return_value=True):
+                mock_msvcrt = MagicMock()
+                mock_msvcrt.getwch.return_value = chr(27)  # ESC key
+                with patch.dict("sys.modules", {"msvcrt": mock_msvcrt}):
+                    with self.assertRaises(SystemExit) as ctx:
+                        prompt_input("Test prompt: ")
+                    self.assertEqual(ctx.exception.code, 0)
+
+    def test_prompt_input_msvcrt_typing_and_backspace(self):
+        """Verify prompt_input properly handles character input and backspace in interactive console."""
+        import io
+        from contextlib import redirect_stdout
+        from unittest.mock import patch, MagicMock
+        from dos2_encounter_balancer import prompt_input
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with patch("sys.stdin.isatty", return_value=True):
+                mock_msvcrt = MagicMock()
+                # Type 'x', 'y', Backspace, 'z', Enter -> result should be 'xz'
+                mock_msvcrt.getwch.side_effect = ["x", "y", chr(8), "z", "\r"]
+                with patch.dict("sys.modules", {"msvcrt": mock_msvcrt}):
+                    result = prompt_input("Test prompt: ")
+                    self.assertEqual(result, "xz")
+
+
+    def test_gm_mode_ap_limits_enforced(self):
+        """Verify GM Mode AP limits: Start AP is fixed at 4, Max AP is fixed at 6, Turn AP is 0 to 6."""
+        party = PartyConfig(level=4, party_size=4)
+        for enc_type in EncounterType:
+            enc = generate_encounter(party, encounter_type=enc_type, seed=42)
+            for enemy in enc.enemies:
+                self.assertEqual(enemy.stats.ap_start, 4, f"{enemy.name} in {enc_type.value} has ap_start != 4")
+                self.assertEqual(enemy.stats.ap_max, 6, f"{enemy.name} in {enc_type.value} has ap_max != 6")
+                self.assertGreaterEqual(enemy.stats.ap_recovery, 0, f"{enemy.name} in {enc_type.value} has ap_recovery < 0")
+                self.assertLessEqual(enemy.stats.ap_recovery, 6, f"{enemy.name} in {enc_type.value} has ap_recovery > 6")
+
+        # Also test for all minion counts (0 to 5) in BOSS encounters
+        for minions in range(6):
+            enc = generate_encounter(party, encounter_type=EncounterType.BOSS, minion_count=minions, seed=42)
+            for enemy in enc.enemies:
+                self.assertEqual(enemy.stats.ap_start, 4)
+                self.assertEqual(enemy.stats.ap_max, 6)
+                self.assertGreaterEqual(enemy.stats.ap_recovery, 0)
+                self.assertLessEqual(enemy.stats.ap_recovery, 6)
+
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
