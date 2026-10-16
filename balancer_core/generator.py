@@ -844,7 +844,12 @@ def generate_encounter(
     if race is not None:
         templates = get_templates_by_faction(faction, race=race)
         if not templates:
-            templates = get_templates_by_faction(Faction.ANY, race=race)
+            if faction is not None and faction != Faction.ANY:
+                # Preserve the explicitly selected faction and ignore the incompatible race filter
+                race = None
+                templates = get_templates_by_faction(faction)
+            else:
+                templates = get_templates_by_faction(Faction.ANY, race=race)
         if not templates:
             templates = BESTIARY
         else:

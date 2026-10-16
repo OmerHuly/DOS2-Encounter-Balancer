@@ -40,6 +40,7 @@ from balancer_core import (
     format_encounter_terminal,
     export_encounter_to_markdown,
     get_all_boss_templates,
+    get_templates_by_faction,
     search_templates,
     find_template_by_name,
 )
@@ -242,7 +243,7 @@ def interactive_mode():
 
     # 4. Encounter type
     enc_options = [
-        ("Random / GM Choice", None),
+        ("Random", None),
         (EncounterType.STANDARD.value, EncounterType.STANDARD),
         (EncounterType.BOSS.value, EncounterType.BOSS),
         (EncounterType.SWARM.value, EncounterType.SWARM),
@@ -277,7 +278,7 @@ def interactive_mode():
         )
 
         boss_selection_modes = [
-            "Random / Thematic Boss for Selected Faction (Default)",
+            "Random / Thematic Boss for Selected Faction",
             "Select from Iconic Bestiary Bosses (Trolls, Titans, Overlords, etc.)",
             "Search Bestiary by keyword (e.g. 'Troll', 'Spider', 'Magister')",
             "Forcefully designate / create a custom Boss (e.g. 'Cave Troll Chieftain')",
@@ -386,13 +387,8 @@ def interactive_mode():
         )
         selected_faction = next(item[1] for item in faction_options if item[0] == faction_choice)
 
-        # 6. Single Race Filter (Optional)
-        prompt_race_title = "> Restrict Encounter to a Single Enemy Race?"
-        if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
-            prompt_race_title = "> Restrict Minions to a Single Enemy Race?"
-
-        race_options = [
-            ("Any / Multi-racial (Default)", None),
+        # 6. Single Race Filter (Optional - dynamically filtered by selected faction)
+        all_race_candidates = [
             ("Human Only", Race.HUMAN),
             ("Elf Only", Race.ELF),
             ("Dwarf Only", Race.DWARF),
@@ -402,13 +398,42 @@ def interactive_mode():
             ("Undead Elf Only", Race.UNDEAD_ELF),
             ("Undead Lizard Only", Race.UNDEAD_LIZARD),
             ("Undead Human Only", Race.UNDEAD_HUMAN),
+            ("Demon Only", Race.DEMON),
+            ("Creature / Beast Only", Race.CREATURE),
+            ("Automaton Only", Race.AUTOMATON),
         ]
-        race_choice = prompt_choice(
-            prompt_race_title,
-            [opt[0] for opt in race_options],
-            default_index=0
-        )
-        selected_race = next(item[1] for item in race_options if item[0] == race_choice)
+
+        if selected_faction == Faction.ANY:
+            # Keep standard playable / undead race filters when faction is Any
+            valid_race_choices = [
+                opt for opt in all_race_candidates
+                if opt[1] not in (Race.DEMON, Race.CREATURE, Race.AUTOMATON)
+            ]
+        else:
+            faction_templates = get_templates_by_faction(selected_faction)
+            distinct_races = {t.race for t in faction_templates}
+            if len(distinct_races) <= 1:
+                valid_race_choices = []
+            else:
+                valid_race_choices = [
+                    opt for opt in all_race_candidates
+                    if len(get_templates_by_faction(selected_faction, race=opt[1])) > 0
+                ]
+
+        if valid_race_choices:
+            prompt_race_title = "> Restrict Encounter to a Single Enemy Race?"
+            if selected_enc_type == EncounterType.BOSS and selected_minion_count and selected_minion_count > 0:
+                prompt_race_title = "> Restrict Minions to a Single Enemy Race?"
+
+            race_options = [("Any / Multi-racial", None)] + valid_race_choices
+            race_choice = prompt_choice(
+                prompt_race_title,
+                [opt[0] for opt in race_options],
+                default_index=0
+            )
+            selected_race = next(item[1] for item in race_options if item[0] == race_choice)
+        else:
+            selected_race = None
 
     party_cfg = PartyConfig(
         level=level,

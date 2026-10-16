@@ -1260,8 +1260,86 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
                         f"{enemy.name} has both Demon and Ice King"
                     )
 
+    def test_encounter_type_random_label_and_no_double_default(self):
+        """Verify Encounter Type menu displays 'Random (Default)' instead of 'Random / GM Choice' and never prints '(Default) (Default)'."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        # 1. Party size [4]: \n
+        # 2. Level [1-25]: 4\n
+        # 3. Damage comp [1]: \n
+        # 4. Difficulty [1]: \n
+        # 5. Encounter type [1]: \n (Random)
+        # 6. Faction [1]: 1\n (Random / Mixed Factions)
+        # 7. Race [1]: 1\n (Any / Multi-racial)
+        # 8. GM Action: 4\n (Exit)
+        inputs = "\n4\n\n\n\n1\n1\n4\n"
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=inputs,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"Interactive mode failed: {res.stderr}")
+        self.assertIn("[1] Random (Default)", res.stdout)
+        self.assertNotIn("Random / GM Choice", res.stdout)
+        self.assertNotIn("(Default) (Default)", res.stdout)
+
+    def test_single_race_factions_skip_race_prompt(self):
+        """Verify factions with only one race (Beasts, Voidwoken, Automatons) automatically skip the race restriction prompt."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        # Faction option 6 is Wild Beasts & Elementals (all Creature / Beast)
+        # Sequence: Party size (\n), Level (4\n), Damage (\n), Difficulty (\n), Type (2 = Standard\n), Faction (6 = Beasts\n), Action (4 = Exit\n)
+        inputs = "\n4\n\n\n2\n6\n4\n"
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=inputs,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"Interactive mode failed: {res.stderr}")
+        self.assertNotIn("Restrict Encounter to a Single Enemy Race?", res.stdout)
+        self.assertIn("Wild Beasts & Elementals", res.stdout)
+
+    def test_multi_race_faction_filters_race_options(self):
+        """Verify multi-racial factions only display races that actually exist in that faction."""
+        script_path = os.path.abspath("dos2_encounter_balancer.py")
+        # Faction option 2 is Magisters & Divine Order (has Human, Elf, Lizard, Creature; no Dwarf or Undead)
+        inputs = "\n4\n\n\n2\n2\n1\n4\n"
+        res = subprocess.run(
+            [sys.executable, script_path, "-i"],
+            input=inputs,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        self.assertEqual(res.returncode, 0, f"Interactive mode failed: {res.stderr}")
+        self.assertIn("Restrict Encounter to a Single Enemy Race?", res.stdout)
+        self.assertIn("Human Only", res.stdout)
+        self.assertIn("Elf Only", res.stdout)
+        self.assertIn("Lizard Only", res.stdout)
+        self.assertNotIn("Dwarf Only", res.stdout)
+        self.assertNotIn("Undead Dwarf Only", res.stdout)
+
+    def test_explicit_faction_preserved_when_incompatible_race_passed(self):
+        """Verify generate_encounter preserves an explicitly chosen faction even if an incompatible race filter is provided."""
+        party = PartyConfig(level=4, party_size=4)
+        enc = generate_encounter(
+            party,
+            encounter_type=EncounterType.STANDARD,
+            faction=Faction.BEASTS,
+            race=Race.HUMAN,
+            seed=42
+        )
+        self.assertEqual(enc.faction, Faction.BEASTS)
+        self.assertIsNone(enc.selected_race)
+        for npc in enc.enemies:
+            self.assertEqual(npc.faction, Faction.BEASTS)
+            self.assertEqual(npc.race, Race.CREATURE)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
