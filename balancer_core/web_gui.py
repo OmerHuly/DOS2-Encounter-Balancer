@@ -16,6 +16,7 @@ from .models import (
     EncounterType,
     Faction,
     Race,
+    Archetype,
     DamageProfile,
     Difficulty,
     NPC,
@@ -26,7 +27,14 @@ from .bestiary import (
     get_all_boss_templates,
     find_template_by_name,
 )
-from .generator import generate_encounter, DEFENSE_PROFILES
+from .skills_db import SKILLS_DATABASE
+from .generator import (
+    generate_encounter,
+    build_custom_encounter,
+    CustomEnemySpec,
+    ROLE_DEFAULTS,
+    DEFENSE_PROFILES,
+)
 from .exporter import (
     format_encounter_terminal,
     format_encounter_markdown,
@@ -48,6 +56,23 @@ ALL_RACE_CANDIDATES = [
     ("Creature / Beast Only", Race.CREATURE),
     ("Automaton Only", Race.AUTOMATON),
 ]
+
+
+def _infer_combat_role_from_template(tpl: Any) -> str:
+    if tpl.archetype not in (Archetype.BOSS, Archetype.MINION):
+        return tpl.archetype.name
+    eq_l = tpl.equipment.lower()
+    tac_l = tpl.ai_tactics.lower()
+    nm_l = tpl.name.lower()
+    if any(k in eq_l or k in tac_l or k in nm_l for k in ["dagger", "rogue", "assassin", "shadowblade", "cutthroat"]):
+        return Archetype.ROGUE.name
+    if any(k in eq_l or k in tac_l or k in nm_l for k in ["bow", "crossbow", "ranger", "marksman", "hunter"]):
+        return Archetype.RANGER.name
+    if any(k in eq_l or k in tac_l or k in nm_l for k in ["wand", "staff", "mage", "wizard", "pyro", "cryo", "elementalist"]):
+        return Archetype.MAGE.name
+    if any(k in eq_l or k in tac_l or k in nm_l for k in ["shield", "bulwark", "tank", "guardian"]):
+        return Archetype.TANK.name
+    return Archetype.FIGHTER.name
 
 
 def get_valid_races_for_faction(faction: Faction) -> List[Dict[str, Optional[str]]]:
@@ -88,12 +113,73 @@ def get_gui_metadata() -> Dict[str, Any]:
         {"value": Faction.AUTOMATONS.name, "label": Faction.AUTOMATONS.value},
     ]
 
+    builder_factions = [f for f in factions if f["value"] != "ANY"]
+
+    builder_races = [
+        {"value": r.name, "label": r.value}
+        for r in [
+            Race.HUMAN,
+            Race.ELF,
+            Race.DWARF,
+            Race.LIZARD,
+            Race.UNDEAD_HUMAN,
+            Race.UNDEAD_ELF,
+            Race.UNDEAD_DWARF,
+            Race.UNDEAD_LIZARD,
+            Race.UNDEAD,
+            Race.CREATURE,
+            Race.DEMON,
+            Race.AUTOMATON,
+        ]
+    ]
+
+    combat_roles = [
+        {
+            "value": arch.name,
+            "label": arch.value,
+            "default_equipment": ROLE_DEFAULTS[arch]["equipment"],
+        }
+        for arch in [
+            Archetype.FIGHTER,
+            Archetype.RANGER,
+            Archetype.ROGUE,
+            Archetype.MAGE,
+            Archetype.TANK,
+            Archetype.BATTLEMAGE,
+            Archetype.CLERIC,
+            Archetype.SUMMONER,
+        ]
+    ]
+
+    unit_tiers = [
+        {"value": "NORMAL", "label": "Normal Unit (Standard Combatant)"},
+        {"value": "MINION", "label": "Minion / Swarmer (Low HP Cannon-Fodder)"},
+        {"value": "ELITE", "label": "Elite Champion (+Armor & Perseverance)"},
+        {"value": "BOSS", "label": "Boss / Commander (High AP & Aura)"},
+    ]
+
+    level_offsets = [
+        {"value": -2, "label": "-2 Levels (Underleveled)"},
+        {"value": -1, "label": "-1 Level (Slightly Weaker)"},
+        {"value": 0, "label": "0 (Same as Party Level)"},
+        {"value": 1, "label": "+1 Level (Veteran Threat)"},
+        {"value": 2, "label": "+2 Levels (Overleveled Threat)"},
+    ]
+
     faction_races = {}
     for f in Faction:
         faction_races[f.name] = get_valid_races_for_faction(f)
 
     encounter_types = [
         {"value": "RANDOM", "label": "Random"},
+        {"value": EncounterType.STANDARD.name, "label": EncounterType.STANDARD.value},
+        {"value": EncounterType.BOSS.name, "label": EncounterType.BOSS.value},
+        {"value": EncounterType.SWARM.name, "label": EncounterType.SWARM.value},
+        {"value": EncounterType.ELITE.name, "label": EncounterType.ELITE.value},
+    ]
+
+    builder_encounter_types = [
+        {"value": "AUTO", "label": "Auto-Detect (1 Enemy = Boss Encounter)"},
         {"value": EncounterType.STANDARD.name, "label": EncounterType.STANDARD.value},
         {"value": EncounterType.BOSS.name, "label": EncounterType.BOSS.value},
         {"value": EncounterType.SWARM.name, "label": EncounterType.SWARM.value},
@@ -155,28 +241,89 @@ def get_gui_metadata() -> Dict[str, Any]:
             "race": t.race.name,
             "race_label": t.race.value,
             "archetype": t.archetype.value,
+            "archetype_key": t.archetype.name,
+            "combat_role_key": _infer_combat_role_from_template(t),
+            "default_tier": "BOSS" if t.archetype == Archetype.BOSS else ("MINION" if t.archetype == Archetype.MINION else "NORMAL"),
+            "equipment": t.equipment,
             "can_be_boss": t.can_be_boss or t.archetype.name == "BOSS",
         }
         for t in BESTIARY
     ]
 
+    all_skills = [
+        {
+            "name": s.name,
+            "school": s.school,
+            "tier": s.tier,
+            "ap_cost": s.ap_cost,
+            "damage_type": s.damage_type,
+            "description": s.description,
+            "status_applied": s.status_applied,
+            "memory_cost": s.memory_cost,
+            "is_innate": s.is_innate,
+        }
+        for s in SKILLS_DATABASE
+    ]
+
+    canonical_schools = [
+        "Warfare", "Huntsman", "Scoundrel", "Pyrokinetic", "Hydrosophist",
+        "Aerotheurge", "Geomancer", "Necromancer", "Polymorph", "Summoning", "Special"
+    ]
+    found_schools = {s.school for s in SKILLS_DATABASE}
+    skill_schools = [sch for sch in canonical_schools if sch in found_schools] + sorted(list(found_schools - set(canonical_schools)))
+
     return {
         "factions": factions,
+        "builder_factions": builder_factions,
+        "builder_races": builder_races,
+        "combat_roles": combat_roles,
+        "unit_tiers": unit_tiers,
+        "level_offsets": level_offsets,
         "faction_races": faction_races,
         "encounter_types": encounter_types,
+        "builder_encounter_types": builder_encounter_types,
         "damage_profiles": damage_profiles,
         "difficulties": difficulties,
         "defense_profiles": defense_profiles,
         "boss_templates": boss_templates,
         "all_templates": all_templates,
+        "all_skills": all_skills,
+        "skill_schools": skill_schools,
     }
 
 
-def serialize_npc(npc: NPC, index: int) -> Dict[str, Any]:
+def serialize_npc(npc: NPC, index: int, party_level: Optional[int] = None) -> Dict[str, Any]:
     """Serializes an NPC dataclass to a JSON-ready dictionary."""
+    if npc.archetype == Archetype.BOSS:
+        unit_tier_key = "BOSS"
+    elif npc.archetype == Archetype.MINION:
+        unit_tier_key = "MINION"
+    elif "Champion" in npc.title or npc.name.startswith("Elite "):
+        unit_tier_key = "ELITE"
+    else:
+        unit_tier_key = "NORMAL"
+
+    base_name = npc.name[6:] if (npc.name.startswith("Elite ") and not find_template_by_name(npc.name)) else npc.name
+    matched_tpl = find_template_by_name(base_name)
+
+    if npc.archetype not in (Archetype.BOSS, Archetype.MINION):
+        combat_role_key = npc.archetype.name
+    elif matched_tpl is not None:
+        combat_role_key = _infer_combat_role_from_template(matched_tpl)
+    elif npc.stats.intelligence > npc.stats.strength and npc.stats.intelligence > npc.stats.finesse:
+        combat_role_key = Archetype.MAGE.name
+    elif npc.stats.finesse > npc.stats.strength:
+        combat_role_key = Archetype.ROGUE.name if "dagger" in npc.equipment.lower() else Archetype.RANGER.name
+    else:
+        combat_role_key = Archetype.FIGHTER.name
+
+    level_offset = max(-2, min(2, npc.level - party_level)) if party_level is not None else 0
+
     return {
         "index": index,
         "name": npc.name,
+        "base_name": base_name,
+        "template_name": matched_tpl.name if matched_tpl else "CUSTOM",
         "title": npc.title,
         "faction": npc.faction.value,
         "faction_key": npc.faction.name,
@@ -184,7 +331,10 @@ def serialize_npc(npc: NPC, index: int) -> Dict[str, Any]:
         "race_key": npc.race.name,
         "archetype": npc.archetype.value,
         "archetype_key": npc.archetype.name,
+        "combat_role_key": combat_role_key,
+        "unit_tier_key": unit_tier_key,
         "level": npc.level,
+        "level_offset": level_offset,
         "gm_template_id": npc.gm_template_id,
         "equipment": npc.equipment,
         "ai_tactics": npc.ai_tactics,
@@ -266,7 +416,7 @@ def serialize_encounter(encounter: Encounter) -> Dict[str, Any]:
             "tactical_recommendations": a.tactical_recommendations,
             "tuning_dials": a.tuning_dials,
         } if a else None,
-        "enemies": [serialize_npc(npc, idx) for idx, npc in enumerate(encounter.enemies, 1)],
+        "enemies": [serialize_npc(npc, idx, party_level=p.level) for idx, npc in enumerate(encounter.enemies, 1)],
         "markdown": format_encounter_markdown(encounter),
         "terminal_text": format_encounter_terminal(encounter),
     }
@@ -339,6 +489,43 @@ def build_encounter_from_payload(payload: Dict[str, Any]) -> Encounter:
         defense_profile=defense_profile,
         seed=seed,
     )
+
+
+def build_custom_encounter_from_payload(payload: Dict[str, Any]) -> Encounter:
+    """Constructs and balances a custom Encounter from an Interactive Encounter Builder JSON payload."""
+    level = max(1, min(25, int(payload.get("level", 4))))
+    party_size = max(1, min(4, int(payload.get("party_size", 4))))
+    is_lone_wolf = bool(payload.get("is_lone_wolf", False)) and party_size in (1, 2)
+
+    dp_key = payload.get("damage_profile", "BALANCED")
+    damage_profile = DamageProfile[dp_key] if dp_key in DamageProfile.__members__ else DamageProfile.BALANCED
+
+    diff_key = payload.get("difficulty", "BALANCED")
+    difficulty = Difficulty[diff_key] if diff_key in Difficulty.__members__ else Difficulty.BALANCED
+
+    enc_type_raw = payload.get("encounter_type", "AUTO")
+    seed = payload.get("seed")
+    if seed is not None and seed != "":
+        seed = int(seed)
+    else:
+        seed = None
+
+    party_cfg = PartyConfig(
+        level=level,
+        party_size=party_size,
+        is_lone_wolf=is_lone_wolf,
+        damage_profile=damage_profile,
+        difficulty=difficulty,
+    )
+
+    enemy_specs = payload.get("enemies", [])
+    return build_custom_encounter(
+        party_config=party_cfg,
+        enemy_specs=enemy_specs,
+        encounter_type=enc_type_raw,
+        seed=seed,
+    )
+
 
 
 HTML_DASHBOARD = r"""<!DOCTYPE html>
@@ -1121,6 +1308,68 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     font-weight: 600;
   }
 
+  .skill-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .btn-skill-remove {
+    background: transparent;
+    border: none;
+    color: #887a6d;
+    cursor: pointer;
+    font-size: 0.82rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .btn-skill-remove:hover {
+    color: #ff6b6b;
+    background: rgba(220, 53, 69, 0.18);
+  }
+
+  .builder-skill-picker-row {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .builder-skill-select {
+    flex: 1;
+    font-size: 0.76rem;
+    padding: 4px 8px;
+    background: #110f0d;
+    border: 1px solid #3d3227;
+    border-radius: 4px;
+    color: var(--text-gold);
+    outline: none;
+  }
+
+  .builder-skill-select:focus {
+    border-color: var(--border-gold-bright);
+  }
+
+  .builder-skill-select optgroup {
+    background: #1a1714;
+    color: #e6c875;
+    font-weight: 700;
+  }
+
+  .builder-skill-select option {
+    background: #110f0d;
+    color: #e0d8cb;
+    font-weight: normal;
+  }
+
+  .builder-skill-select option:disabled {
+    color: #665b50;
+  }
+
   /* AI Tactics Footer */
   .tactics-box {
     background: rgba(0, 0, 0, 0.25);
@@ -1134,6 +1383,124 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 
   .tactics-box strong {
     color: var(--text-gold);
+  }
+
+  /* Interactive Builder Mode Tabs & Controls */
+  .mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    background: #100e0c;
+    padding: 4px;
+    border-radius: 5px;
+    border: 1px solid var(--border-subtle);
+    margin-bottom: 16px;
+  }
+
+  .mode-tab {
+    cursor: pointer;
+    font-family: var(--font-serif);
+    font-size: 0.77rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 8px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .mode-tab:hover {
+    color: var(--text-main);
+    background: rgba(200, 157, 76, 0.08);
+  }
+
+  .mode-tab.active {
+    background: linear-gradient(180deg, #9e2a2b 0%, #5e1516 100%);
+    border-color: var(--border-gold-bright);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(158, 42, 43, 0.45);
+  }
+
+  .builder-solo-badge {
+    font-size: 0.75rem;
+    color: #ffcf8b;
+    background: rgba(158, 42, 43, 0.22);
+    border: 1px solid var(--border-gold-bright);
+    border-left: 3px solid var(--accent-crimson-bright);
+    border-radius: 4px;
+    padding: 7px 10px;
+    margin-bottom: 12px;
+    line-height: 1.35;
+  }
+
+  .builder-card-controls {
+    background: #13100d;
+    border-bottom: 1px solid #332a21;
+    padding: 9px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .builder-ctrl-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .builder-ctrl-item select {
+    padding: 3px 6px;
+    font-size: 0.74rem;
+    height: 26px;
+    width: auto;
+    max-width: 145px;
+    background: #1c1814;
+    border-color: #453a2e;
+  }
+
+  .builder-card-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .btn-mini {
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid #4a3e31;
+    background: #241e18;
+    color: var(--text-main);
+    white-space: nowrap;
+    transition: all 0.12s ease;
+  }
+
+  .btn-mini:hover:not(:disabled) {
+    border-color: var(--border-gold-bright);
+    color: var(--text-gold);
+    background: #2f271f;
+  }
+
+  .btn-mini.danger:hover:not(:disabled) {
+    border-color: var(--accent-crimson-bright);
+    background: rgba(158, 42, 43, 0.35);
+    color: #ffb3b3;
+  }
+
+  .btn-mini:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   /* Toast Notification */
@@ -1182,7 +1549,13 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 <div class="workspace">
   <!-- LEFT CONFIGURATION PANEL -->
   <aside class="config-panel">
-    <div class="panel-section-title">1. Player Party Profile</div>
+    <!-- MODE SWITCHER TABS -->
+    <div class="mode-tabs" role="tablist">
+      <button type="button" class="mode-tab active" id="tabAutoMode" data-mode="auto">&#x2694; Auto-Generator</button>
+      <button type="button" class="mode-tab" id="tabBuilderMode" data-mode="builder">&#x2692; Interactive Builder</button>
+    </div>
+
+    <div class="panel-section-title" style="margin-top: 0;">1. Player Party Profile</div>
     <div class="form-row">
       <div class="form-group">
         <label for="partySize">Party Size (1-4)</label>
@@ -1214,76 +1587,159 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       <select id="difficulty"></select>
     </div>
 
-    <div class="panel-section-title">2. Encounter Structure</div>
-    <div class="form-group">
-      <label for="encounterType">Encounter Type</label>
-      <select id="encounterType"></select>
-    </div>
-
-    <!-- BOSS CONFIGURATION SUB-PANEL -->
-    <div class="sub-panel" id="bossConfigPanel" style="display: none;">
-      <div class="sub-panel-header">Boss Encounter Tuning</div>
+    <!-- ================================================================= -->
+    <!-- MODE A: AUTO-GENERATOR CONTROLS                                   -->
+    <!-- ================================================================= -->
+    <div id="autoModePanel">
+      <div class="panel-section-title">2. Encounter Structure</div>
       <div class="form-group">
-        <label for="minionCount">Accompanying Minions (0 - 5)</label>
-        <select id="minionCount">
-          <option value="0">0 Minions (Epic Solo Boss Overlord Duel)</option>
-          <option value="1">1 Minion (Boss + Elite Lieutenant Duo)</option>
-          <option value="2">2 Minions (Tightly Guarded Trio)</option>
-          <option value="3" selected>3 Minions (Standard Balanced Boss Squad)</option>
-          <option value="4">4 Minions (Heavy Minion Guard)</option>
-          <option value="5">5 Minions (Full Minion Swarm)</option>
-        </select>
+        <label for="encounterType">Encounter Type</label>
+        <select id="encounterType"></select>
       </div>
 
+      <!-- BOSS CONFIGURATION SUB-PANEL -->
+      <div class="sub-panel" id="bossConfigPanel" style="display: none;">
+        <div class="sub-panel-header">Boss Encounter Tuning</div>
+        <div class="form-group">
+          <label for="minionCount">Accompanying Minions (0 - 5)</label>
+          <select id="minionCount">
+            <option value="0">0 Minions (Epic Solo Boss Overlord Duel)</option>
+            <option value="1">1 Minion (Boss + Elite Lieutenant Duo)</option>
+            <option value="2">2 Minions (Tightly Guarded Trio)</option>
+            <option value="3" selected>3 Minions (Standard Balanced Boss Squad)</option>
+            <option value="4">4 Minions (Heavy Minion Guard)</option>
+            <option value="5">5 Minions (Full Minion Swarm)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="bossSelectionMode">Boss Selection Mode</label>
+          <select id="bossSelectionMode">
+            <option value="random" selected>Random / Thematic Boss for Faction</option>
+            <option value="bestiary">Choose Iconic Boss from Bestiary</option>
+            <option value="custom">Search or Forcefully Create Custom Boss</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="bossBestiaryGroup" style="display: none;">
+          <label for="bossPresetSelect">Select Bestiary Boss</label>
+          <select id="bossPresetSelect"></select>
+        </div>
+
+        <div class="form-group" id="bossCustomGroup" style="display: none;">
+          <label for="bossCustomInput">Boss Name or Keyword (e.g. "Mountain Troll", "Viper Assassin")</label>
+          <input type="text" id="bossCustomInput" placeholder="Enter Boss name or keyword...">
+        </div>
+
+        <div class="form-group">
+          <label for="defenseProfile">Defensive &amp; Elemental Weakness Profile</label>
+          <select id="defenseProfile"></select>
+        </div>
+      </div>
+
+      <!-- FACTION & RACE SECTION -->
+      <div id="factionRaceSection">
+        <div class="panel-section-title" id="factionSectionTitle">3. Faction &amp; Race Theme</div>
+        <div class="form-group" id="factionGroup">
+          <label for="factionSelect" id="factionLabel">Thematic Enemy Faction</label>
+          <select id="factionSelect"></select>
+        </div>
+
+        <div class="form-group" id="raceGroup">
+          <label for="raceSelect" id="raceLabel">Restrict to Single Enemy Race</label>
+          <select id="raceSelect"></select>
+        </div>
+        <div class="hint-badge" id="singleRaceFactionNotice" style="display: none;">
+          All units in this faction share the same innate race; single-race restriction is automatically applied.
+        </div>
+      </div>
+
+      <div class="hint-badge" id="soloBossSkipNotice" style="display: none; margin-bottom: 14px;">
+        Solo Boss duel with a designated Boss NPC selected &mdash; Faction &amp; Race are automatically inherited from the Boss.
+      </div>
+
+      <button class="btn btn-primary" id="btnGenerate" style="margin-top: 8px;">
+        &#x21bb; Re-Roll Encounter Variant
+      </button>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODE B: INTERACTIVE ENCOUNTER BUILDER CONTROLS                    -->
+    <!-- ================================================================= -->
+    <div id="builderModePanel" style="display: none;">
+      <div class="panel-section-title">2. Encounter Type</div>
       <div class="form-group">
-        <label for="bossSelectionMode">Boss Selection Mode</label>
-        <select id="bossSelectionMode">
-          <option value="random" selected>Random / Thematic Boss for Faction</option>
-          <option value="bestiary">Choose Iconic Boss from Bestiary</option>
-          <option value="custom">Search or Forcefully Create Custom Boss</option>
-        </select>
+        <label for="builderEncounterType">Encounter Type Definition</label>
+        <select id="builderEncounterType"></select>
       </div>
 
-      <div class="form-group" id="bossBestiaryGroup" style="display: none;">
-        <label for="bossPresetSelect">Select Bestiary Boss</label>
-        <select id="bossPresetSelect"></select>
+      <div class="builder-solo-badge" id="builderSoloRuleBadge">
+        <strong>Solo Enemy Rule Active:</strong> Since there is 1 enemy in the encounter, it is automatically balanced as a <strong>Boss Encounter (Solo Boss / Overlord)</strong>.
       </div>
 
-      <div class="form-group" id="bossCustomGroup" style="display: none;">
-        <label for="bossCustomInput">Boss Name or Keyword (e.g. "Mountain Troll", "Viper Assassin")</label>
-        <input type="text" id="bossCustomInput" placeholder="Enter Boss name or keyword...">
+      <div class="panel-section-title">3. Add New Enemy to Roster</div>
+      <div class="sub-panel" style="margin-bottom: 10px;">
+        <div class="form-group">
+          <label for="builderFaction">Enemy Type / Faction</label>
+          <select id="builderFaction"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="builderTemplate">Bestiary Preset or Custom Unit</label>
+          <select id="builderTemplate"></select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="builderRace">Enemy Race</label>
+            <select id="builderRace"></select>
+          </div>
+          <div class="form-group">
+            <label for="builderRole">Enemy Role / Class</label>
+            <select id="builderRole"></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="builderTier">Unit Rank / Tier</label>
+            <select id="builderTier"></select>
+          </div>
+          <div class="form-group">
+            <label for="builderLevelOffset">Level Offset</label>
+            <select id="builderLevelOffset"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="builderDefense">Defensive / Elemental Profile</label>
+          <select id="builderDefense"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="builderName">Unit Name (Optional Override)</label>
+          <input type="text" id="builderName" placeholder="Auto-named from template or role...">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label for="builderEquipment">Weapons &amp; Equipment</label>
+          <input type="text" id="builderEquipment" placeholder="Auto-equipped for role...">
+        </div>
+
+        <button type="button" class="btn btn-primary" id="btnAddBuilderEnemy">
+          + Add Enemy to Encounter
+        </button>
       </div>
 
-      <div class="form-group">
-        <label for="defenseProfile">Defensive &amp; Elemental Weakness Profile</label>
-        <select id="defenseProfile"></select>
+      <div class="form-row">
+        <button type="button" class="btn" id="btnBuilderRerollTerrain" style="justify-content: center; font-size: 0.78rem; padding: 8px 10px;">
+          &#x21bb; Re-Roll Terrain
+        </button>
+        <button type="button" class="btn" id="btnBuilderResetSolo" style="justify-content: center; font-size: 0.78rem; padding: 8px 10px;">
+          Reset to 1 Enemy
+        </button>
       </div>
     </div>
-
-    <!-- FACTION & RACE SECTION -->
-    <div id="factionRaceSection">
-      <div class="panel-section-title" id="factionSectionTitle">3. Faction &amp; Race Theme</div>
-      <div class="form-group" id="factionGroup">
-        <label for="factionSelect" id="factionLabel">Thematic Enemy Faction</label>
-        <select id="factionSelect"></select>
-      </div>
-
-      <div class="form-group" id="raceGroup">
-        <label for="raceSelect" id="raceLabel">Restrict to Single Enemy Race</label>
-        <select id="raceSelect"></select>
-      </div>
-      <div class="hint-badge" id="singleRaceFactionNotice" style="display: none;">
-        All units in this faction share the same innate race; single-race restriction is automatically applied.
-      </div>
-    </div>
-
-    <div class="hint-badge" id="soloBossSkipNotice" style="display: none; margin-bottom: 14px;">
-      Solo Boss duel with a designated Boss NPC selected &mdash; Faction &amp; Race are automatically inherited from the Boss.
-    </div>
-
-    <button class="btn btn-primary" id="btnGenerate" style="margin-top: 8px;">
-      &#x21bb; Re-Roll Encounter Variant
-    </button>
   </aside>
 
   <!-- RIGHT RESULTS AREA -->
@@ -1297,6 +1753,8 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 <script>
   let META = null;
   let CURRENT_ENCOUNTER = null;
+  let ACTIVE_MODE = 'auto'; // 'auto' | 'builder'
+  let BUILDER_ENEMIES = [];
   let debounceTimer = null;
   let activeRequestId = 0;
 
@@ -1307,11 +1765,19 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     setTimeout(() => t.classList.remove('show'), 2600);
   }
 
-  function scheduleGenerate(delayMs = 150) {
+  function scheduleRefresh(delayMs = 150) {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      generateEncounter();
+      refreshActiveMode();
     }, delayMs);
+  }
+
+  function refreshActiveMode(isExplicitReroll = false) {
+    if (ACTIVE_MODE === 'builder') {
+      return buildCustomEncounter(isExplicitReroll);
+    } else {
+      return generateEncounter(isExplicitReroll);
+    }
   }
 
   async function initApp() {
@@ -1323,6 +1789,33 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     populateSelect('encounterType', META.encounter_types, 'STANDARD');
     populateSelect('factionSelect', META.factions, 'ANY');
     populateSelect('defenseProfile', META.defense_profiles, 'auto');
+
+    // Populate Interactive Builder controls
+    populateSelect('builderEncounterType', META.builder_encounter_types, 'AUTO');
+    populateSelect('builderFaction', META.builder_factions, 'BANDITS');
+    populateSelect('builderRace', META.builder_races, 'HUMAN');
+    populateSelect('builderRole', META.combat_roles, 'FIGHTER');
+    populateSelect('builderTier', META.unit_tiers, 'NORMAL');
+    populateSelect('builderLevelOffset', META.level_offsets, 0);
+    populateSelect('builderDefense', META.defense_profiles, 'auto');
+
+    updateBuilderTemplateOptions();
+    syncBuilderFormFromTemplate();
+
+    // Initialize Builder Roster with 1 default enemy (which triggers Solo Boss rule)
+    BUILDER_ENEMIES = [
+      {
+        template_name: 'Bandit Kingpin',
+        name: 'Bandit Kingpin',
+        faction: 'BANDITS',
+        race: 'HUMAN',
+        combat_role: 'FIGHTER',
+        unit_tier: 'BOSS',
+        defense_profile: 'auto',
+        equipment: 'Two-Handed Greataxe + Spiked Shoulders',
+        level_offset: 0
+      }
+    ];
 
     const bossPreset = document.getElementById('bossPresetSelect');
     bossPreset.innerHTML = '';
@@ -1346,11 +1839,110 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       const opt = document.createElement('option');
       opt.value = item.value;
       opt.textContent = item.label;
-      if ((defaultVal && item.value === defaultVal) || (!defaultVal && idx === 0)) {
+      if ((defaultVal !== null && String(item.value) === String(defaultVal)) || (defaultVal === null && idx === 0)) {
         opt.selected = true;
       }
       el.appendChild(opt);
     });
+  }
+
+  function updateBuilderTemplateOptions() {
+    const facKey = document.getElementById('builderFaction').value;
+    const tplSelect = document.getElementById('builderTemplate');
+    tplSelect.innerHTML = '';
+
+    const customOpt = document.createElement('option');
+    customOpt.value = 'CUSTOM';
+    customOpt.textContent = '✦ Custom Enemy (Configure Freely Below)';
+    tplSelect.appendChild(customOpt);
+
+    const matching = (META.all_templates || []).filter(t => t.faction === facKey);
+    matching.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.name;
+      const rankTag = t.can_be_boss ? ' [Boss]' : (t.default_tier === 'MINION' ? ' [Minion]' : '');
+      opt.textContent = `${t.name} (${t.race_label} • ${t.archetype}${rankTag})`;
+      tplSelect.appendChild(opt);
+    });
+
+    if (matching.length > 0) {
+      tplSelect.value = matching[0].name;
+    } else {
+      tplSelect.value = 'CUSTOM';
+    }
+  }
+
+  function syncBuilderFormFromTemplate() {
+    const tplName = document.getElementById('builderTemplate').value;
+    if (tplName === 'CUSTOM') {
+      const roleKey = document.getElementById('builderRole').value;
+      const roleObj = (META.combat_roles || []).find(r => r.value === roleKey);
+      if (roleObj) {
+        document.getElementById('builderEquipment').value = roleObj.default_equipment;
+      }
+      document.getElementById('builderName').value = '';
+      return;
+    }
+
+    const tpl = (META.all_templates || []).find(t => t.name === tplName);
+    if (!tpl) return;
+
+    document.getElementById('builderFaction').value = tpl.faction;
+    document.getElementById('builderRace').value = tpl.race;
+    document.getElementById('builderRole').value = tpl.combat_role_key || 'FIGHTER';
+    document.getElementById('builderTier').value = tpl.default_tier || 'NORMAL';
+    document.getElementById('builderName').value = tpl.name;
+    document.getElementById('builderEquipment').value = tpl.equipment;
+  }
+
+  function updateBuilderSoloBadge() {
+    const badge = document.getElementById('builderSoloRuleBadge');
+    const encTypeEl = document.getElementById('builderEncounterType');
+    if (!badge || !encTypeEl) return;
+
+    if (BUILDER_ENEMIES.length === 1) {
+      badge.innerHTML = `<strong>Solo Enemy Rule Active:</strong> With <strong>1 enemy</strong> in the encounter, it is automatically defined and balanced as a <strong>Boss Encounter (Solo Boss / Overlord)</strong>.`;
+      badge.style.borderColor = 'var(--border-gold-bright)';
+      badge.style.background = 'rgba(158, 42, 43, 0.24)';
+    } else {
+      badge.innerHTML = `<strong>Dynamic Roster Balancer (${BUILDER_ENEMIES.length} Enemies):</strong> Armor, Vitality, and AP Recovery automatically scale across all units to match your party.`;
+      badge.style.borderColor = 'var(--border-gold)';
+      badge.style.background = 'rgba(200, 157, 76, 0.10)';
+    }
+  }
+
+  function switchMode(newMode) {
+    ACTIVE_MODE = newMode;
+    document.getElementById('tabAutoMode').classList.toggle('active', newMode === 'auto');
+    document.getElementById('tabBuilderMode').classList.toggle('active', newMode === 'builder');
+    document.getElementById('autoModePanel').style.display = newMode === 'auto' ? 'block' : 'none';
+    document.getElementById('builderModePanel').style.display = newMode === 'builder' ? 'block' : 'none';
+
+    if (newMode === 'builder') {
+      updateBuilderSoloBadge();
+      buildCustomEncounter();
+    } else {
+      generateEncounter();
+    }
+  }
+
+  function importCurrentEncounterToBuilder() {
+    if (!CURRENT_ENCOUNTER || !CURRENT_ENCOUNTER.enemies) return;
+    BUILDER_ENEMIES = CURRENT_ENCOUNTER.enemies.map(e => ({
+      template_name: e.template_name || 'CUSTOM',
+      name: e.base_name || e.name,
+      faction: e.faction_key || 'BANDITS',
+      race: e.race_key || 'HUMAN',
+      combat_role: e.combat_role_key || 'FIGHTER',
+      unit_tier: e.unit_tier_key || 'NORMAL',
+      defense_profile: 'auto',
+      equipment: e.equipment || '',
+      level_offset: typeof e.level_offset === 'number' ? e.level_offset : 0,
+      skills: e.skills ? e.skills.map(s => s.name) : undefined,
+    }));
+    document.getElementById('builderEncounterType').value = 'AUTO';
+    switchMode('builder');
+    showToast(`Imported ${BUILDER_ENEMIES.length} combatant(s) into Interactive Builder!`);
   }
 
   function updateRaceOptionsForFaction(factionKey) {
@@ -1447,9 +2039,16 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       const facKey = document.getElementById('factionSelect').value;
       updateRaceOptionsForFaction(facKey);
     }
+
+    updateBuilderSoloBadge();
   }
 
   function bindEvents() {
+    // Mode tabs
+    document.getElementById('tabAutoMode').addEventListener('click', () => switchMode('auto'));
+    document.getElementById('tabBuilderMode').addEventListener('click', () => switchMode('builder'));
+
+    // Shared Party Profile controls
     document.getElementById('partySize').addEventListener('change', () => {
       const ps = parseInt(document.getElementById('partySize').value, 10);
       const lw = document.getElementById('isLoneWolf').checked && (ps <= 2);
@@ -1457,7 +2056,7 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
         document.getElementById('minionCount').value = '2';
       }
       syncDynamicControls();
-      generateEncounter();
+      refreshActiveMode();
     });
 
     document.getElementById('partyLevel').addEventListener('change', () => {
@@ -1465,25 +2064,26 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       if (isNaN(val) || val < 1) val = 1;
       if (val > 25) val = 25;
       document.getElementById('partyLevel').value = val;
-      generateEncounter();
+      refreshActiveMode();
     });
 
     document.getElementById('partyLevel').addEventListener('input', () => {
       const val = parseInt(document.getElementById('partyLevel').value, 10);
       if (!isNaN(val) && val >= 1 && val <= 25) {
-        scheduleGenerate(120);
+        scheduleRefresh(120);
       }
     });
 
     document.getElementById('isLoneWolf').addEventListener('change', (e) => {
       document.getElementById('minionCount').value = e.target.checked ? '2' : '3';
       syncDynamicControls();
-      generateEncounter();
+      refreshActiveMode();
     });
 
-    document.getElementById('damageProfile').addEventListener('change', () => generateEncounter());
-    document.getElementById('difficulty').addEventListener('change', () => generateEncounter());
+    document.getElementById('damageProfile').addEventListener('change', () => refreshActiveMode());
+    document.getElementById('difficulty').addEventListener('change', () => refreshActiveMode());
 
+    // Auto-Generator mode controls
     document.getElementById('encounterType').addEventListener('change', () => {
       syncDynamicControls();
       generateEncounter();
@@ -1516,7 +2116,7 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 
     document.getElementById('bossCustomInput').addEventListener('input', () => {
       syncDynamicControls();
-      scheduleGenerate(220);
+      scheduleRefresh(220);
     });
 
     document.getElementById('defenseProfile').addEventListener('change', () => generateEncounter());
@@ -1530,6 +2130,63 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 
     document.getElementById('btnGenerate').addEventListener('click', () => generateEncounter(true));
 
+    // Interactive Builder mode controls
+    document.getElementById('builderEncounterType').addEventListener('change', () => {
+      updateBuilderSoloBadge();
+      buildCustomEncounter();
+    });
+
+    document.getElementById('builderFaction').addEventListener('change', () => {
+      updateBuilderTemplateOptions();
+      syncBuilderFormFromTemplate();
+    });
+
+    document.getElementById('builderTemplate').addEventListener('change', () => {
+      syncBuilderFormFromTemplate();
+    });
+
+    document.getElementById('builderRole').addEventListener('change', () => {
+      const roleKey = document.getElementById('builderRole').value;
+      const roleObj = (META.combat_roles || []).find(r => r.value === roleKey);
+      if (roleObj) {
+        document.getElementById('builderEquipment').value = roleObj.default_equipment;
+      }
+    });
+
+    document.getElementById('btnAddBuilderEnemy').addEventListener('click', () => {
+      const newSpec = {
+        template_name: document.getElementById('builderTemplate').value,
+        name: document.getElementById('builderName').value.trim() || null,
+        faction: document.getElementById('builderFaction').value,
+        race: document.getElementById('builderRace').value,
+        combat_role: document.getElementById('builderRole').value,
+        unit_tier: document.getElementById('builderTier').value,
+        defense_profile: document.getElementById('builderDefense').value,
+        equipment: document.getElementById('builderEquipment').value.trim() || null,
+        level_offset: parseInt(document.getElementById('builderLevelOffset').value, 10) || 0,
+      };
+      BUILDER_ENEMIES.push(newSpec);
+      updateBuilderSoloBadge();
+      buildCustomEncounter();
+      showToast(`Added enemy (#${BUILDER_ENEMIES.length}) & rebalanced encounter!`);
+    });
+
+    document.getElementById('btnBuilderRerollTerrain').addEventListener('click', () => {
+      buildCustomEncounter(true);
+    });
+
+    document.getElementById('btnBuilderResetSolo').addEventListener('click', () => {
+      if (BUILDER_ENEMIES.length > 1) {
+        BUILDER_ENEMIES = [BUILDER_ENEMIES[0]];
+        BUILDER_ENEMIES[0].unit_tier = 'BOSS';
+      }
+      document.getElementById('builderEncounterType').value = 'AUTO';
+      updateBuilderSoloBadge();
+      buildCustomEncounter();
+      showToast('Reset roster to 1 Solo Boss!');
+    });
+
+    // Header Export Buttons
     document.getElementById('btnCopyMd').addEventListener('click', () => {
       if (!CURRENT_ENCOUNTER) return;
       navigator.clipboard.writeText(CURRENT_ENCOUNTER.markdown);
@@ -1557,10 +2214,11 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 
     document.getElementById('btnSaveDisk').addEventListener('click', async () => {
       if (!CURRENT_ENCOUNTER) return;
+      const exportPayload = ACTIVE_MODE === 'builder' ? getBuilderPayload() : getFormPayload();
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(getFormPayload())
+        body: JSON.stringify(exportPayload)
       });
       const data = await res.json();
       if (data.filepath) {
@@ -1587,6 +2245,7 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     }
 
     return {
+      mode: 'auto',
       party_size: parseInt(document.getElementById('partySize').value, 10),
       level: Math.max(1, Math.min(25, parseInt(document.getElementById('partyLevel').value, 10) || 4)),
       is_lone_wolf: document.getElementById('isLoneWolf').checked,
@@ -1598,6 +2257,19 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       boss_template: bossTemplate,
       minion_count: minionCount,
       defense_profile: defenseProfile,
+    };
+  }
+
+  function getBuilderPayload() {
+    return {
+      mode: 'builder',
+      party_size: parseInt(document.getElementById('partySize').value, 10),
+      level: Math.max(1, Math.min(25, parseInt(document.getElementById('partyLevel').value, 10) || 4)),
+      is_lone_wolf: document.getElementById('isLoneWolf').checked,
+      damage_profile: document.getElementById('damageProfile').value,
+      difficulty: document.getElementById('difficulty').value,
+      encounter_type: document.getElementById('builderEncounterType').value,
+      enemies: BUILDER_ENEMIES,
     };
   }
 
@@ -1630,6 +2302,151 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     }
   }
 
+  async function buildCustomEncounter(isExplicitReroll = false) {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    const reqId = ++activeRequestId;
+    const payload = getBuilderPayload();
+    const resultsEl = document.getElementById('resultsArea');
+    if (isExplicitReroll && resultsEl) {
+      resultsEl.style.opacity = '0.6';
+      resultsEl.style.transition = 'opacity 0.1s ease';
+    }
+    try {
+      const res = await fetch('/api/build_custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (reqId !== activeRequestId) return;
+      CURRENT_ENCOUNTER = data;
+      updateBuilderSoloBadge();
+      renderEncounter(CURRENT_ENCOUNTER);
+    } finally {
+      if (resultsEl) {
+        resultsEl.style.opacity = '1';
+      }
+    }
+  }
+
+  function updateBuilderUnitField(idx, field, value) {
+    if (!BUILDER_ENEMIES[idx]) return;
+    if (field === 'level_offset') {
+      BUILDER_ENEMIES[idx][field] = parseInt(value, 10) || 0;
+    } else if (field === 'combat_role') {
+      BUILDER_ENEMIES[idx][field] = value;
+      const roleObj = (META.combat_roles || []).find(r => r.value === value);
+      if (roleObj) {
+        BUILDER_ENEMIES[idx].equipment = roleObj.default_equipment;
+      }
+      delete BUILDER_ENEMIES[idx].skills;
+    } else {
+      BUILDER_ENEMIES[idx][field] = value;
+    }
+    buildCustomEncounter();
+  }
+
+  function duplicateBuilderUnit(idx) {
+    if (!BUILDER_ENEMIES[idx]) return;
+    const copy = JSON.parse(JSON.stringify(BUILDER_ENEMIES[idx]));
+    if (copy.unit_tier === 'BOSS') {
+      copy.unit_tier = 'NORMAL';
+    }
+    BUILDER_ENEMIES.splice(idx + 1, 0, copy);
+    updateBuilderSoloBadge();
+    buildCustomEncounter();
+    showToast('Duplicated combatant & rebalanced encounter!');
+  }
+
+  function removeBuilderUnit(idx) {
+    if (BUILDER_ENEMIES.length <= 1) return;
+    BUILDER_ENEMIES.splice(idx, 1);
+    if (BUILDER_ENEMIES.length === 1) {
+      BUILDER_ENEMIES[0].unit_tier = 'BOSS';
+    }
+    updateBuilderSoloBadge();
+    buildCustomEncounter();
+    showToast('Removed combatant & rebalanced encounter!');
+  }
+
+  function escapeJsStr(str) {
+    if (!str) return '';
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
+  function addBuilderUnitSkill(idx, skillName) {
+    if (!BUILDER_ENEMIES[idx]) return;
+    if (!BUILDER_ENEMIES[idx].skills) {
+      if (CURRENT_ENCOUNTER && CURRENT_ENCOUNTER.enemies && CURRENT_ENCOUNTER.enemies[idx]) {
+        BUILDER_ENEMIES[idx].skills = (CURRENT_ENCOUNTER.enemies[idx].skills || []).map(s => s.name);
+      } else {
+        BUILDER_ENEMIES[idx].skills = [];
+      }
+    }
+    const clean = String(skillName).trim();
+    if (!clean) return;
+    if (!BUILDER_ENEMIES[idx].skills.some(s => s.toLowerCase() === clean.toLowerCase())) {
+      BUILDER_ENEMIES[idx].skills.push(clean);
+      buildCustomEncounter();
+      showToast(`Added skill "${clean}" & realigned combat abilities!`);
+    }
+  }
+
+  function removeBuilderUnitSkill(idx, skillName) {
+    if (!BUILDER_ENEMIES[idx]) return;
+    if (!BUILDER_ENEMIES[idx].skills) {
+      if (CURRENT_ENCOUNTER && CURRENT_ENCOUNTER.enemies && CURRENT_ENCOUNTER.enemies[idx]) {
+        BUILDER_ENEMIES[idx].skills = (CURRENT_ENCOUNTER.enemies[idx].skills || []).map(s => s.name);
+      } else {
+        BUILDER_ENEMIES[idx].skills = [];
+      }
+    }
+    BUILDER_ENEMIES[idx].skills = BUILDER_ENEMIES[idx].skills.filter(
+      s => s.toLowerCase() !== String(skillName).trim().toLowerCase()
+    );
+    buildCustomEncounter();
+    showToast(`Removed skill "${skillName}" & realigned combat abilities!`);
+  }
+
+  function resetBuilderUnitSkills(idx) {
+    if (!BUILDER_ENEMIES[idx]) return;
+    delete BUILDER_ENEMIES[idx].skills;
+    buildCustomEncounter();
+    showToast('Reset skills to authentic template defaults!');
+  }
+
+  function renderSkillPickerRow(idx, currentSkills) {
+    if (ACTIVE_MODE !== 'builder' || !META.all_skills) return '';
+    const currentSet = new Set((currentSkills || []).map(s => s.name.toLowerCase()));
+    const schools = META.skill_schools || [];
+
+    let optgroups = '';
+    schools.forEach(school => {
+      const skillsInSchool = (META.all_skills || []).filter(s => s.school === school);
+      if (!skillsInSchool.length) return;
+      const opts = skillsInSchool.map(s => {
+        const has = currentSet.has(s.name.toLowerCase());
+        const disabled = has ? 'disabled' : '';
+        const tag = has ? ' (Learned)' : ` (${s.ap_cost} AP)`;
+        return `<option value="${escapeHtml(s.name)}" ${disabled}>${escapeHtml(s.name)}${tag}</option>`;
+      }).join('');
+      optgroups += `<optgroup label="${escapeHtml(school)}">${opts}</optgroup>`;
+    });
+
+    return `
+      <div class="builder-skill-picker-row">
+        <select class="builder-skill-select" onchange="if(this.value){ addBuilderUnitSkill(${idx}, this.value); this.value=''; }">
+          <option value="" disabled selected>+ Add Skill to Combatant...</option>
+          ${optgroups}
+        </select>
+        <button type="button" class="btn-mini" onclick="resetBuilderUnitSkills(${idx})" title="Reset to authentic template defaults">&#x21BA; Reset</button>
+      </div>
+    `;
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -1637,6 +2454,82 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function renderBuilderCardControls(e, idx) {
+    if (ACTIVE_MODE !== 'builder') return '';
+    const spec = BUILDER_ENEMIES[idx] || {};
+    const isSolo = BUILDER_ENEMIES.length === 1;
+
+    const roleOptions = (META.combat_roles || []).map(r => {
+      const sel = (spec.combat_role || e.combat_role_key) === r.value ? 'selected' : '';
+      return `<option value="${r.value}" ${sel}>${escapeHtml(r.label.split('/')[0].trim())}</option>`;
+    }).join('');
+
+    const raceOptions = (META.builder_races || []).map(r => {
+      const sel = (spec.race || e.race_key) === r.value ? 'selected' : '';
+      return `<option value="${r.value}" ${sel}>${escapeHtml(r.label)}</option>`;
+    }).join('');
+
+    const tierOptions = isSolo
+      ? `<option value="BOSS" selected>Solo Boss (1-Enemy Rule)</option>`
+      : (META.unit_tiers || []).map(t => {
+          const sel = (spec.unit_tier || e.unit_tier_key) === t.value ? 'selected' : '';
+          return `<option value="${t.value}" ${sel}>${escapeHtml(t.label.split('(')[0].trim())}</option>`;
+        }).join('');
+
+    const offsetVal = typeof spec.level_offset === 'number' ? spec.level_offset : (e.level_offset || 0);
+    const offsetOptions = [-2, -1, 0, 1, 2].map(off => {
+      const sel = offsetVal === off ? 'selected' : '';
+      const lbl = off === 0 ? 'Lvl +0' : (off > 0 ? `Lvl +${off}` : `Lvl ${off}`);
+      return `<option value="${off}" ${sel}>${lbl}</option>`;
+    }).join('');
+
+    const defVal = spec.defense_profile || 'auto';
+    const defOptions = (META.defense_profiles || []).map(d => {
+      const sel = defVal === d.value ? 'selected' : '';
+      const shortLbl = d.value === 'auto' ? 'Auto' : d.label.split('(')[0].trim();
+      return `<option value="${d.value}" ${sel}>${escapeHtml(shortLbl)}</option>`;
+    }).join('');
+
+    return `
+      <div class="builder-card-controls">
+        <div class="builder-ctrl-item">
+          <span>Rank:</span>
+          <select onchange="updateBuilderUnitField(${idx}, 'unit_tier', this.value)" ${isSolo ? 'disabled title="1 Enemy is automatically a Boss Encounter"' : ''}>
+            ${tierOptions}
+          </select>
+        </div>
+        <div class="builder-ctrl-item">
+          <span>Role:</span>
+          <select onchange="updateBuilderUnitField(${idx}, 'combat_role', this.value)">
+            ${roleOptions}
+          </select>
+        </div>
+        <div class="builder-ctrl-item">
+          <span>Race:</span>
+          <select onchange="updateBuilderUnitField(${idx}, 'race', this.value)">
+            ${raceOptions}
+          </select>
+        </div>
+        <div class="builder-ctrl-item">
+          <span>Lvl:</span>
+          <select onchange="updateBuilderUnitField(${idx}, 'level_offset', this.value)">
+            ${offsetOptions}
+          </select>
+        </div>
+        <div class="builder-ctrl-item">
+          <span>Def:</span>
+          <select onchange="updateBuilderUnitField(${idx}, 'defense_profile', this.value)">
+            ${defOptions}
+          </select>
+        </div>
+        <div class="builder-card-actions">
+          <button type="button" class="btn-mini" onclick="duplicateBuilderUnit(${idx})" title="Duplicate this enemy">+ Copy</button>
+          <button type="button" class="btn-mini danger" onclick="removeBuilderUnit(${idx})" ${isSolo ? 'disabled title="Encounter requires at least 1 enemy"' : 'title="Remove this enemy"'}>&#x2715;</button>
+        </div>
+      </div>
+    `;
   }
 
   function renderEncounter(enc) {
@@ -1651,13 +2544,19 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     });
 
     const raceBadge = enc.selected_race
-      ? `<span class="tag tag-gold">Race Filter: ${escapeHtml(enc.selected_race)} Only</span>`
+      ? `<span class="tag tag-gold">Race: ${escapeHtml(enc.selected_race)}</span>`
       : '';
     const lwBadge = p.is_lone_wolf
       ? `<span class="tag tag-crimson">Lone Wolf Active</span>`
       : '';
+    const builderBadge = ACTIVE_MODE === 'builder'
+      ? `<span class="tag tag-crimson">Interactive Builder (${enc.enemies.length === 1 ? 'Solo Boss Rule' : 'Auto-Balanced'})</span>`
+      : '';
+    const customizeBtnHtml = ACTIVE_MODE === 'auto'
+      ? `<button type="button" class="btn" onclick="importCurrentEncounterToBuilder()">&#x2692; Customize in Builder</button>`
+      : '';
 
-    const enemyCardsHtml = enc.enemies.map(e => {
+    const enemyCardsHtml = enc.enemies.map((e, arrIdx) => {
       const isBoss = e.archetype_key === 'BOSS';
       const physPct = Math.min(100, Math.round((e.stats.physical_armor / maxBarVal) * 100));
       const magPct  = Math.min(100, Math.round((e.stats.magic_armor / maxBarVal) * 100));
@@ -1689,6 +2588,9 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       const skillsHtml = e.skills.map(s => {
         const innateTag = s.is_innate ? `<span class="skill-badge innate">Innate</span>` : '';
         const statusTag = s.status_applied ? `<span class="skill-badge status">${escapeHtml(s.status_applied)}</span>` : '';
+        const removeBtn = (ACTIVE_MODE === 'builder')
+          ? `<button type="button" class="btn-skill-remove" onclick="removeBuilderUnitSkill(${arrIdx}, '${escapeJsStr(s.name)}')" title="Remove skill ${escapeHtml(s.name)}">&#x2715;</button>`
+          : '';
         return `
           <div class="skill-item" title="${escapeHtml(s.description)}">
             <div class="skill-left">
@@ -1697,13 +2599,17 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
               ${innateTag}
               ${statusTag}
             </div>
-            <span class="skill-ap">${s.ap_cost} AP</span>
+            <div class="skill-right">
+              <span class="skill-ap">${s.ap_cost} AP</span>
+              ${removeBtn}
+            </div>
           </div>
         `;
       }).join('');
 
       const showRoleTag = e.title && e.title !== 'Combatant' && !e.archetype.toLowerCase().includes(e.title.toLowerCase());
       const roleTagStr = showRoleTag ? ` (${escapeHtml(e.title)})` : '';
+      const builderControlsHtml = renderBuilderCardControls(e, arrIdx);
 
       return `
         <div class="enemy-card ${isBoss ? 'is-boss' : ''}">
@@ -1716,6 +2622,7 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
               ID: ${escapeHtml(e.gm_template_id)}
             </div>
           </div>
+          ${builderControlsHtml}
 
           <div class="card-body">
             <div class="bars-container">
@@ -1766,6 +2673,7 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
               <div class="skills-list">
                 ${skillsHtml}
               </div>
+              ${renderSkillPickerRow(arrIdx, e.skills)}
             </div>
           </div>
 
@@ -1794,8 +2702,10 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
             <span class="tag">${escapeHtml(p.difficulty)}</span>
             ${lwBadge}
             ${raceBadge}
+            ${builderBadge}
           </div>
         </div>
+        ${customizeBtnHtml}
       </div>
 
       <div class="roster-header">
@@ -1912,8 +2822,14 @@ class EncounterGUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/generate":
             enc = build_encounter_from_payload(payload)
             self._send_json(serialize_encounter(enc))
+        elif parsed.path == "/api/build_custom":
+            enc = build_custom_encounter_from_payload(payload)
+            self._send_json(serialize_encounter(enc))
         elif parsed.path == "/api/export":
-            enc = build_encounter_from_payload(payload)
+            if payload.get("mode") == "builder" or "enemies" in payload:
+                enc = build_custom_encounter_from_payload(payload)
+            else:
+                enc = build_encounter_from_payload(payload)
             os.makedirs(self.output_dir, exist_ok=True)
             filepath = export_encounter_to_markdown(enc, output_dir=self.output_dir)
             self._send_json({

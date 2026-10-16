@@ -6,7 +6,7 @@ and evaluates balance metrics (Action Economy, EHP ratio, Damage Profile compati
 
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from .models import (
     PartyConfig,
     Encounter,
@@ -227,8 +227,9 @@ def align_combat_abilities_with_skills(
     total_pts = sum(v for k, v in stats.combat_abilities.items() if k in magic_schools)
     if total_pts <= 0:
         return
-    missing_schools = [s for s in unique_schools if stats.combat_abilities.get(s, 0) == 0]
-    if missing_schools:
+    current_assigned = {k: v for k, v in stats.combat_abilities.items() if k in magic_schools and v > 0}
+    needs_realign = any(stats.combat_abilities.get(s, 0) == 0 for s in unique_schools) or any(s not in unique_schools for s in current_assigned)
+    if needs_realign:
         new_abilities = {k: v for k, v in stats.combat_abilities.items() if k not in magic_schools}
         base_per_school = max(1, total_pts // len(unique_schools))
         remainder = total_pts - (base_per_school * len(unique_schools))
@@ -660,6 +661,7 @@ def _create_npc(
     leadership_bonus: int = 0,
     defense_profile_name: Optional[str] = None,
     ap_recovery: Optional[int] = None,
+    explicit_skills: Optional[List[str]] = None,
 ) -> NPC:
     actual_archetype = archetype or template.archetype
     class_style = template.archetype if template.archetype not in (Archetype.BOSS, Archetype.MINION) else None
@@ -686,16 +688,47 @@ def _create_npc(
     calc_max_skills = 3 + max(0, stats.memory - 10)
     slots = min(max_slots, calc_max_skills) if max_slots is not None else calc_max_skills
     
-    skills = get_skills_for_archetype(
-        actual_archetype,
-        level,
-        max_slots=slots,
-        race=template.race,
-        ai_tactics=template.ai_tactics,
-        equipment=template.equipment,
-        signature_skills=getattr(template, "signature_skills", None),
-        class_archetype=class_style
-    )
+    if explicit_skills is not None:
+        from .skills_db import SKILLS_DATABASE, get_racial_skills_for_race, Skill
+        skill_map = {s.name.lower(): s for s in SKILLS_DATABASE}
+        skills = []
+        if template.race:
+            for r_s in get_racial_skills_for_race(template.race):
+                if r_s not in skills:
+                    skills.append(r_s)
+        for s_name in explicit_skills:
+            clean = str(s_name).strip().lower()
+            if not clean:
+                continue
+            if clean in skill_map:
+                sk = skill_map[clean]
+                if sk not in skills:
+                    skills.append(sk)
+            else:
+                skills.append(Skill(
+                    name=str(s_name).strip(),
+                    school="Special",
+                    tier="Novice",
+                    ap_cost=2,
+                    damage_type="Physical",
+                    description=f"Custom tactical ability: {str(s_name).strip()}",
+                    status_applied=None
+                ))
+        used_mem = sum(s.memory_cost for s in skills)
+        needed_mem = 10 + max(0, used_mem - 3)
+        if stats.memory < needed_mem:
+            stats.memory = needed_mem
+    else:
+        skills = get_skills_for_archetype(
+            actual_archetype,
+            level,
+            max_slots=slots,
+            race=template.race,
+            ai_tactics=template.ai_tactics,
+            equipment=template.equipment,
+            signature_skills=getattr(template, "signature_skills", None),
+            class_archetype=class_style
+        )
     
     align_combat_abilities_with_skills(
         stats,
@@ -706,6 +739,14 @@ def _create_npc(
         difficulty=party_config.difficulty,
         class_archetype=class_style
     )
+
+    if explicit_skills is None:
+        calc_max = 3 + max(0, stats.memory - 10)
+        final_slots = min(max_slots, calc_max) if max_slots is not None else calc_max
+        innates = [s for s in skills if s.is_innate]
+        memorized = [s for s in skills if not s.is_innate]
+        if len(memorized) > final_slots:
+            skills = innates + memorized[:final_slots]
 
     if ap_recovery is not None:
         stats.ap_recovery = ap_recovery
@@ -1086,3 +1127,507 @@ def generate_encounter(
         minion_count=actual_minions if encounter_type == EncounterType.BOSS else None,
         boss_name=boss_tpl_resolved.name if (encounter_type == EncounterType.BOSS and boss_tpl_resolved) else None,
     )
+
+
+@dataclass
+class CustomEnemySpec:
+    """Specification for a single custom or bestiary-based enemy in the Interactive Encounter Builder."""
+    template_name: Optional[str] = None
+    name: Optional[str] = None
+    faction: Optional[Union[Faction, str]] = None
+    race: Optional[Union[Race, str]] = None
+    combat_role: Optional[Union[Archetype, str]] = None
+    unit_tier: str = "NORMAL"  # "NORMAL", "MINION", "ELITE", "BOSS"
+    defense_profile: str = "auto"
+    equipment: Optional[str] = None
+    level_offset: int = 0
+    skills: Optional[List[str]] = None
+
+
+ROLE_DEFAULTS: Dict[Archetype, Dict[str, str]] = {
+    Archetype.FIGHTER: {
+        "equipment": "Two-Handed Greatsword + Heavy Plate",
+        "ai_tactics": "Charges into melee with Battering Ram, cleaves grouped enemies with Whirlwind, and knocks down stripped targets with Battle Stomp.",
+        "gm_notes": "Frontline martial bruiser focused on physical armor stripping and knockdowns.",
+        "gm_template_id": "GM_Fighter_Custom",
+    },
+    Archetype.TANK: {
+        "equipment": "One-Handed Warhammer + Bulwark Tower Shield",
+        "ai_tactics": "Anchors the frontline, throws Bouncing Shield, uses Shields Up and Fortify to weather heavy focus fire, and bodyblocks choke points.",
+        "gm_notes": "High-durability frontline tank with shield recovery and physical crowd control.",
+        "gm_template_id": "GM_Tank_Custom",
+    },
+    Archetype.RANGER: {
+        "equipment": "Masterwork Longbow + Elemental Arrow Quiver",
+        "ai_tactics": "Uses Tactical Retreat to reach high ground (+20% damage), pins down melee threats with Pin Down, and fires Ricochet and Ballistic Shot.",
+        "gm_notes": "Mobile ranged marksman; prioritize elevated perches.",
+        "gm_template_id": "GM_Ranger_Custom",
+    },
+    Archetype.ROGUE: {
+        "equipment": "Dual Serrated Daggers + Assassin Leathers",
+        "ai_tactics": "Teleports behind vulnerable backline targets with Backlash or Cloak and Dagger, bursts with Adrenaline and Rupture Tendons.",
+        "gm_notes": "High-initiative backstabber targeting low-physical-armor heroes.",
+        "gm_template_id": "GM_Rogue_Custom",
+    },
+    Archetype.MAGE: {
+        "equipment": "Elemental Quarterstaff + Archmage Robes",
+        "ai_tactics": "Bombards clustered party members with Fireball and Fossil Strike, creates elemental surface combos, and strips Magic Armor from afar.",
+        "gm_notes": "Backline elemental spellcaster; keep at range behind frontline blockers.",
+        "gm_template_id": "GM_Mage_Custom",
+    },
+    Archetype.BATTLEMAGE: {
+        "equipment": "Runed Battle-Staff + Reinforced Mail",
+        "ai_tactics": "Engages at close-to-mid range, weaving elemental AoE blasts with Warfare crowd control and blinding/shocking aura pressure.",
+        "gm_notes": "Hybrid melee-magic combatant capable of threatening both Physical and Magic Armor.",
+        "gm_template_id": "GM_Battlemage_Custom",
+    },
+    Archetype.CLERIC: {
+        "equipment": "Blessed Ceremonial Mace + Kite Shield",
+        "ai_tactics": "Sustains allies with Restoration and Armor of Frost while punishing enemies with Necromancy and Hydro spells.",
+        "gm_notes": "Support and sustain specialist; prioritize disrupting or focusing down early.",
+        "gm_template_id": "GM_Cleric_Custom",
+    },
+    Archetype.SUMMONER: {
+        "equipment": "Conjurer's Wand + Runed Buckler",
+        "ai_tactics": "Summons an Elemental Incarnate on an active surface on Turn 1, empowers it with Power/Farsight Infusions, and spawns Elemental Totems.",
+        "gm_notes": "Action-economy multiplier via incarnate and totems.",
+        "gm_template_id": "GM_Summoner_Custom",
+    },
+}
+
+
+def _parse_enemy_spec(raw: Union[CustomEnemySpec, Dict[str, Any]]) -> CustomEnemySpec:
+    if isinstance(raw, CustomEnemySpec):
+        return raw
+    raw_skills = raw.get("skills")
+    parsed_skills: Optional[List[str]] = None
+    if isinstance(raw_skills, list):
+        parsed_skills = [str(s).strip() for s in raw_skills if str(s).strip()]
+    elif isinstance(raw_skills, str) and raw_skills.strip():
+        parsed_skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
+
+    return CustomEnemySpec(
+        template_name=raw.get("template_name"),
+        name=raw.get("name"),
+        faction=raw.get("faction"),
+        race=raw.get("race"),
+        combat_role=raw.get("combat_role") or raw.get("archetype"),
+        unit_tier=str(raw.get("unit_tier") or raw.get("tier") or "NORMAL").upper(),
+        defense_profile=str(raw.get("defense_profile") or "auto"),
+        equipment=raw.get("equipment"),
+        level_offset=int(raw.get("level_offset", 0) or 0),
+        skills=parsed_skills,
+    )
+
+
+def _resolve_custom_template(spec: CustomEnemySpec) -> BestiaryTemplate:
+    base_tpl: Optional[BestiaryTemplate] = None
+    if spec.template_name and str(spec.template_name).strip().upper() not in ("", "CUSTOM", "NONE"):
+        base_tpl = find_template_by_name(str(spec.template_name).strip())
+
+    # 1. Faction
+    faction: Faction = Faction.BANDITS
+    if isinstance(spec.faction, Faction) and spec.faction != Faction.ANY:
+        faction = spec.faction
+    elif isinstance(spec.faction, str) and spec.faction.upper() in Faction.__members__ and spec.faction.upper() != "ANY":
+        faction = Faction[spec.faction.upper()]
+    elif base_tpl is not None and base_tpl.faction != Faction.ANY:
+        faction = base_tpl.faction
+
+    # 2. Race
+    race: Race = Race.HUMAN
+    if isinstance(spec.race, Race):
+        race = spec.race
+    elif isinstance(spec.race, str) and spec.race.upper() in Race.__members__:
+        race = Race[spec.race.upper()]
+    elif base_tpl is not None:
+        race = base_tpl.race
+    else:
+        default_faction_races = {
+            Faction.VOIDWOKEN: Race.CREATURE,
+            Faction.UNDEAD: Race.UNDEAD_HUMAN,
+            Faction.DEMONS: Race.DEMON,
+            Faction.AUTOMATONS: Race.AUTOMATON,
+            Faction.BEASTS: Race.CREATURE,
+        }
+        race = default_faction_races.get(faction, Race.HUMAN)
+
+    # 3. Combat Role (Archetype class style)
+    combat_role: Archetype = Archetype.FIGHTER
+    if isinstance(spec.combat_role, Archetype):
+        combat_role = spec.combat_role
+    elif isinstance(spec.combat_role, str) and spec.combat_role.upper() in Archetype.__members__:
+        combat_role = Archetype[spec.combat_role.upper()]
+    elif base_tpl is not None:
+        combat_role = base_tpl.archetype
+
+    if combat_role in (Archetype.BOSS, Archetype.MINION):
+        if base_tpl is not None:
+            eq_l = base_tpl.equipment.lower()
+            tac_l = base_tpl.ai_tactics.lower()
+            nm_l = base_tpl.name.lower()
+            if any(k in eq_l or k in tac_l or k in nm_l for k in ["dagger", "rogue", "assassin", "shadowblade", "cutthroat"]):
+                combat_role = Archetype.ROGUE
+            elif any(k in eq_l or k in tac_l or k in nm_l for k in ["bow", "crossbow", "ranger", "marksman", "hunter"]):
+                combat_role = Archetype.RANGER
+            elif any(k in eq_l or k in tac_l or k in nm_l for k in ["wand", "staff", "mage", "wizard", "pyro", "cryo", "elementalist"]):
+                combat_role = Archetype.MAGE
+            elif any(k in eq_l or k in tac_l or k in nm_l for k in ["shield", "bulwark", "tank", "guardian"]):
+                combat_role = Archetype.TANK
+            else:
+                combat_role = Archetype.FIGHTER
+        else:
+            combat_role = Archetype.FIGHTER
+
+    role_def = ROLE_DEFAULTS.get(combat_role, ROLE_DEFAULTS[Archetype.FIGHTER])
+    role_changed = (
+        base_tpl is not None
+        and base_tpl.archetype not in (Archetype.BOSS, Archetype.MINION)
+        and combat_role != base_tpl.archetype
+    )
+
+    # 4. Equipment, AI Tactics, GM Notes, GM Template ID, Name
+    if spec.equipment and str(spec.equipment).strip():
+        if role_changed and base_tpl is not None and str(spec.equipment).strip() == base_tpl.equipment:
+            equipment = role_def["equipment"]
+        else:
+            equipment = str(spec.equipment).strip()
+    elif base_tpl is not None and not role_changed:
+        equipment = base_tpl.equipment
+    else:
+        equipment = role_def["equipment"]
+
+    if base_tpl is not None and not role_changed:
+        ai_tactics = base_tpl.ai_tactics
+        gm_notes = base_tpl.gm_notes
+        sig_skills = base_tpl.signature_skills
+        sig_talents = base_tpl.signature_talents
+    else:
+        ai_tactics = role_def["ai_tactics"]
+        gm_notes = role_def["gm_notes"]
+        sig_skills = None
+        sig_talents = None
+
+    if spec.name and str(spec.name).strip():
+        unit_name = str(spec.name).strip()
+    elif base_tpl is not None:
+        unit_name = base_tpl.name
+    else:
+        faction_short = {
+            Faction.MAGISTERS: "Magister",
+            Faction.VOIDWOKEN: "Voidwoken",
+            Faction.UNDEAD: "Black Ring",
+            Faction.BANDITS: "Outlaw",
+            Faction.BEASTS: "Wild",
+            Faction.DEMONS: "Demonic",
+            Faction.AUTOMATONS: "Clockwork",
+        }.get(faction, "Custom")
+        role_short = combat_role.value.split("/")[0].strip()
+        unit_name = f"{faction_short} {race.value} {role_short}"
+
+    gm_id = base_tpl.gm_template_id if base_tpl is not None else role_def["gm_template_id"]
+
+    return BestiaryTemplate(
+        name=unit_name,
+        gm_template_id=gm_id,
+        faction=faction,
+        race=race,
+        archetype=combat_role,
+        equipment=equipment,
+        ai_tactics=ai_tactics,
+        gm_notes=gm_notes,
+        can_be_boss=(spec.unit_tier.upper() == "BOSS"),
+        can_be_minion=(spec.unit_tier.upper() == "MINION"),
+        signature_skills=sig_skills,
+        signature_talents=sig_talents,
+    )
+
+
+def build_custom_encounter(
+    party_config: PartyConfig,
+    enemy_specs: List[Union[CustomEnemySpec, Dict[str, Any]]],
+    encounter_type: Optional[Union[EncounterType, str]] = None,
+    seed: Optional[int] = None,
+) -> Encounter:
+    """
+    Interactive Encounter Builder engine.
+    Builds a custom encounter from user-configured enemy specifications and automatically
+    balances enemy durability (Physical Armor, Magic Armor, Vitality) and Action Economy
+    against the party's size, level, Lone Wolf status, damage composition, and difficulty.
+
+    Core Rule: If there is only 1 enemy in the encounter, the encounter is automatically
+    defined and scaled as a Boss Encounter (Solo Boss / Overlord).
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    specs = [_parse_enemy_spec(s) for s in enemy_specs]
+    if not specs:
+        specs = [CustomEnemySpec(template_name="Bandit Kingpin", unit_tier="BOSS")]
+
+    # Normalize unit tiers
+    valid_tiers = {"NORMAL", "MINION", "ELITE", "BOSS"}
+    for s in specs:
+        s.unit_tier = s.unit_tier.upper() if s.unit_tier and s.unit_tier.upper() in valid_tiers else "NORMAL"
+        s.level_offset = max(-3, min(3, int(s.level_offset)))
+
+    # 1. Determine Encounter Type & Enforce Solo Enemy = Boss Encounter Rule
+    explicit_type: Optional[EncounterType] = None
+    if isinstance(encounter_type, EncounterType):
+        explicit_type = encounter_type
+    elif isinstance(encounter_type, str) and encounter_type.upper() in EncounterType.__members__:
+        explicit_type = EncounterType[encounter_type.upper()]
+
+    solo_auto_promoted = False
+    if len(specs) == 1:
+        effective_encounter_type = EncounterType.BOSS
+        if specs[0].unit_tier != "BOSS":
+            solo_auto_promoted = True
+            specs[0].unit_tier = "BOSS"
+    else:
+        tiers = [s.unit_tier for s in specs]
+        if explicit_type is not None:
+            effective_encounter_type = explicit_type
+            if effective_encounter_type == EncounterType.BOSS and "BOSS" not in tiers:
+                # Promote the first unit (or first Elite) to Boss Commander
+                elite_idx = next((i for i, s in enumerate(specs) if s.unit_tier == "ELITE"), 0)
+                specs[elite_idx].unit_tier = "BOSS"
+        else:
+            # Auto-detect from roster composition
+            if "BOSS" in tiers:
+                effective_encounter_type = EncounterType.BOSS
+            elif all(t == "ELITE" for t in tiers) or (tiers.count("ELITE") >= len(tiers) / 2 and "MINION" not in tiers):
+                effective_encounter_type = EncounterType.ELITE
+            elif tiers.count("MINION") >= len(tiers) / 2 or len(specs) >= 6:
+                effective_encounter_type = EncounterType.SWARM
+            else:
+                effective_encounter_type = EncounterType.STANDARD
+
+    # 2. Construct NPCs with tier-appropriate base stats & abilities
+    party_lvl = party_config.level
+    enemies: List[NPC] = []
+    resolved_templates: List[BestiaryTemplate] = [_resolve_custom_template(s) for s in specs]
+
+    boss_count = sum(1 for s in specs if s.unit_tier == "BOSS")
+    non_boss_count = max(0, len(specs) - boss_count)
+    clamped_minions = min(5, max(0, len(specs) - 1))
+    boss_scaling = calculate_boss_scaling(clamped_minions, party_config.is_lone_wolf)
+
+    for idx, (spec, tpl) in enumerate(zip(specs, resolved_templates)):
+        unit_lvl = max(1, min(25, party_lvl + spec.level_offset))
+        tier = spec.unit_tier
+
+        if len(specs) == 1:
+            # Solo Boss / Overlord
+            solo_scaling = calculate_boss_scaling(0, party_config.is_lone_wolf)
+            npc = _create_npc(
+                template=tpl,
+                level=unit_lvl,
+                party_config=party_config,
+                title="Solo Boss / Overlord",
+                archetype=Archetype.BOSS,
+                max_slots=solo_scaling.boss_max_slots,
+                armor_multiplier=solo_scaling.boss_armor_mult,
+                vitality_multiplier=solo_scaling.boss_vitality_mult,
+                attribute_bonus=solo_scaling.boss_attribute_bonus,
+                con_bonus=solo_scaling.boss_con_bonus,
+                retribution_bonus=solo_scaling.boss_retribution_bonus,
+                initiative_bonus=solo_scaling.boss_initiative_bonus,
+                perseverance_bonus=solo_scaling.boss_perseverance,
+                leadership_bonus=solo_scaling.boss_leadership,
+                defense_profile_name=spec.defense_profile,
+                ap_recovery=solo_scaling.boss_ap_recovery,
+                explicit_skills=spec.skills,
+            )
+        elif tier == "BOSS":
+            npc = _create_npc(
+                template=tpl,
+                level=unit_lvl,
+                party_config=party_config,
+                title="Boss / Commander",
+                archetype=Archetype.BOSS,
+                max_slots=boss_scaling.boss_max_slots,
+                armor_multiplier=boss_scaling.boss_armor_mult,
+                vitality_multiplier=boss_scaling.boss_vitality_mult,
+                attribute_bonus=boss_scaling.boss_attribute_bonus,
+                con_bonus=boss_scaling.boss_con_bonus,
+                retribution_bonus=boss_scaling.boss_retribution_bonus,
+                initiative_bonus=boss_scaling.boss_initiative_bonus,
+                perseverance_bonus=boss_scaling.boss_perseverance,
+                leadership_bonus=boss_scaling.boss_leadership,
+                defense_profile_name=spec.defense_profile,
+                ap_recovery=boss_scaling.boss_ap_recovery,
+                explicit_skills=spec.skills,
+            )
+        elif tier == "ELITE":
+            prefix = "" if tpl.name.lower().startswith("elite ") else "Elite "
+            elite_title = "Elite Lieutenant" if effective_encounter_type == EncounterType.BOSS else "Champion"
+            elite_ap = 5 if len(specs) <= 2 and party_config.total_ap_per_round >= 12 else 4
+            npc = _create_npc(
+                template=tpl,
+                level=unit_lvl,
+                party_config=party_config,
+                title=elite_title,
+                archetype=tpl.archetype,
+                name_prefix=prefix,
+                max_slots=5,
+                armor_multiplier=1.25,
+                vitality_multiplier=1.15,
+                perseverance_bonus=2,
+                defense_profile_name=spec.defense_profile,
+                ap_recovery=elite_ap,
+                explicit_skills=spec.skills,
+            )
+        elif tier == "MINION":
+            minion_title = "Swarmer" if effective_encounter_type == EncounterType.SWARM else "Minion"
+            npc = _create_npc(
+                template=tpl,
+                level=unit_lvl,
+                party_config=party_config,
+                title=minion_title,
+                archetype=Archetype.MINION,
+                max_slots=2,
+                armor_multiplier=boss_scaling.minion_armor_mult if effective_encounter_type == EncounterType.BOSS else 1.0,
+                vitality_multiplier=boss_scaling.minion_vitality_mult if effective_encounter_type == EncounterType.BOSS else 1.0,
+                defense_profile_name=spec.defense_profile if spec.defense_profile != "auto" else None,
+                ap_recovery=4,
+                explicit_skills=spec.skills,
+            )
+        else:  # NORMAL
+            if effective_encounter_type == EncounterType.BOSS:
+                norm_title = "Elite Lieutenant" if non_boss_count == 1 else "Minion"
+                norm_slots = boss_scaling.minion_max_slots
+                norm_arm = boss_scaling.minion_armor_mult
+                norm_vit = boss_scaling.minion_vitality_mult
+                norm_ap = boss_scaling.minion_ap_recovery
+            else:
+                norm_title = "Combatant"
+                norm_slots = None
+                norm_arm = 1.0
+                norm_vit = 1.0
+                norm_ap = 5 if (len(specs) == 2 and party_config.total_ap_per_round >= 12) else 4
+
+            npc = _create_npc(
+                template=tpl,
+                level=unit_lvl,
+                party_config=party_config,
+                title=norm_title,
+                archetype=tpl.archetype,
+                max_slots=norm_slots,
+                armor_multiplier=norm_arm,
+                vitality_multiplier=norm_vit,
+                defense_profile_name=spec.defense_profile if spec.defense_profile != "auto" else None,
+                ap_recovery=norm_ap,
+                explicit_skills=spec.skills,
+            )
+
+        enemies.append(npc)
+
+    # 3. Dynamic Encounter Budget Calibration
+    # Calibrate total enemy EHP to match the party's expected EHP, difficulty tier,
+    # action economy ratio, and intentional level offsets.
+    party_ehp = estimate_party_ehp(party_config)
+    party_ap = party_config.total_ap_per_round
+    enemy_ap = sum(e.stats.ap_recovery for e in enemies)
+
+    diff_target_ratios = {
+        Difficulty.STORY: 0.75,
+        Difficulty.BALANCED: 1.12,
+        Difficulty.TACTICIAN: 1.48,
+        Difficulty.DEADLY: 1.82,
+    }
+    base_target_ratio = diff_target_ratios.get(party_config.difficulty, 1.12)
+
+    # Action economy compensation: fewer enemies need slightly more armor/HP buffer against focus fire;
+    # huge swarms need slightly less per-unit EHP so high turn counts don't become tedious.
+    ap_comp = max(0.75, min(1.30, (party_ap / max(4, enemy_ap)) ** 0.25))
+
+    # Preserve intentional level offset difficulty shifts (+1/+2 makes encounter tougher, -1/-2 makes it lighter)
+    avg_offset = sum(s.level_offset for s in specs) / max(1, len(specs))
+    offset_factor = max(0.65, min(1.65, 1.22 ** avg_offset))
+
+    target_total_ehp = party_ehp * base_target_ratio * ap_comp * offset_factor
+    raw_total_ehp = sum(e.total_ehp for e in enemies)
+
+    scale_factor = 1.0
+    if raw_total_ehp > 0:
+        scale_factor = max(0.45, min(2.25, target_total_ehp / raw_total_ehp))
+        if abs(scale_factor - 1.0) > 0.03:
+            for e in enemies:
+                e.stats.physical_armor = max(0, int(round(e.stats.physical_armor * scale_factor)))
+                e.stats.magic_armor = max(0, int(round(e.stats.magic_armor * scale_factor)))
+                e.stats.vitality = max(15, int(round(e.stats.vitality * scale_factor)))
+
+    # Build Balancer Scaling Explanation
+    if len(specs) == 1:
+        auto_note = "Solo enemy automatically promoted to Solo Boss / Overlord. " if solo_auto_promoted else ""
+        balancer_notes = (
+            f"{auto_note}Solo Boss Duel scaling applied (+{enemies[0].stats.ap_recovery} AP/turn, "
+            f"Perseverance {enemies[0].stats.combat_abilities.get('Perseverance', 5)}, "
+            f"Budget Calibration: {scale_factor:.2f}x durability for {party_config.party_size}-player Lvl {party_lvl} party)."
+        )
+    else:
+        balancer_notes = (
+            f"Interactive Roster Auto-Balancer ({len(enemies)} combatants, {enemy_ap} Enemy AP vs {party_ap} Party AP): "
+            f"Applied {scale_factor:.2f}x durability calibration to align total enemy EHP ({sum(e.total_ehp for e in enemies):,}) "
+            f"with {party_config.difficulty.name.title()} target budget."
+        )
+
+    # 4. Determine dominant Faction & Race for encounter metadata
+    factions_present = {e.faction for e in enemies}
+    dominant_faction = next(iter(factions_present)) if len(factions_present) == 1 else Faction.ANY
+
+    races_present = {e.race for e in enemies}
+    dominant_race = next(iter(races_present)) if len(races_present) == 1 else None
+
+    # 5. Terrain & Hazards
+    terrain_options = [
+        "Elevated wooden scaffolding providing High Ground (+20% damage) on the northern flank.",
+        "Chokepoint bridge flanked by deep water and scattered explosive oil barrels.",
+        "Enclosed stone courtyard with broken pillars granting full line-of-sight cover.",
+        "Narrow cavern corridor with slick poison slime puddles and high stalagmites.",
+        "Ruined shrine courtyard with cursed blood pools and ancient statues."
+    ]
+    tactical_terrain = random.choice(terrain_options)
+
+    hazard_pool = [
+        "2x Oil Barrels placed near central choke point (ready for Ignition/Fireball).",
+        "Water surface puddle on southern side (susceptible to Electrocution or Freezing).",
+        "Poison barrel on high ground (can be detonated or used to heal Undead).",
+        "Steam cloud obscuring ranged line-of-sight in center corridor.",
+        "Scattered crates blocking direct melee charge paths."
+    ]
+    environmental_hazards = random.sample(hazard_pool, k=2)
+
+    boss_npc = next((e for e in enemies if e.archetype == Archetype.BOSS), None)
+    actual_minions = max(0, len(enemies) - 1) if effective_encounter_type == EncounterType.BOSS else None
+
+    analysis = analyze_encounter_balance(
+        party_config=party_config,
+        enemies=enemies,
+        encounter_type=effective_encounter_type,
+        minion_count=actual_minions,
+        boss_scaling_notes=balancer_notes,
+    )
+
+    faction_label = dominant_faction.value if dominant_faction != Faction.ANY else "Custom Mixed Roster"
+    if effective_encounter_type == EncounterType.BOSS and boss_npc:
+        minion_sub = f"{actual_minions} Minion{'s' if actual_minions != 1 else ''}" if actual_minions and actual_minions > 0 else "Solo Boss"
+        encounter_name = f"{faction_label}: Boss Encounter - {boss_npc.name} ({minion_sub}) (Lvl {party_lvl})"
+    else:
+        encounter_name = f"{faction_label}: {effective_encounter_type.value} ({len(enemies)} Enemies, Lvl {party_lvl})"
+
+    return Encounter(
+        name=encounter_name,
+        encounter_type=effective_encounter_type,
+        faction=dominant_faction,
+        party_config=party_config,
+        enemies=enemies,
+        environmental_hazards=environmental_hazards,
+        tactical_terrain=tactical_terrain,
+        analysis=analysis,
+        selected_race=dominant_race,
+        minion_count=actual_minions,
+        boss_name=boss_npc.name if boss_npc else None,
+    )
+

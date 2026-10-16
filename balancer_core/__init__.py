@@ -43,6 +43,9 @@ from .bestiary import (
 from .skills_db import SKILLS_DATABASE, get_skills_for_archetype
 from .generator import (
     generate_encounter,
+    build_custom_encounter,
+    CustomEnemySpec,
+    ROLE_DEFAULTS,
     analyze_encounter_balance,
     calculate_boss_scaling,
     BossScalingProfile,
@@ -57,6 +60,7 @@ from .web_gui import (
     get_valid_races_for_faction,
     serialize_encounter,
     build_encounter_from_payload,
+    build_custom_encounter_from_payload,
 )
 
 __all__ = [
@@ -91,6 +95,9 @@ __all__ = [
     "SKILLS_DATABASE",
     "get_skills_for_archetype",
     "generate_encounter",
+    "build_custom_encounter",
+    "CustomEnemySpec",
+    "ROLE_DEFAULTS",
     "analyze_encounter_balance",
     "calculate_boss_scaling",
     "BossScalingProfile",
@@ -105,6 +112,8 @@ __all__ = [
     "get_valid_races_for_faction",
     "serialize_encounter",
     "build_encounter_from_payload",
+    "build_custom_encounter_from_payload",
 ]
+
 
 

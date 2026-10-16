@@ -1420,9 +1420,332 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_interactive_builder_solo_enemy_is_always_boss_encounter(self):
+        """Verify that if there is only 1 enemy in the builder, the encounter is automatically a Boss Encounter."""
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+
+        party = PartyConfig(level=6, party_size=4, difficulty=Difficulty.BALANCED)
+        # Even if user specifies encounter_type="STANDARD" and unit_tier="NORMAL", 1 enemy must become a Solo Boss
+        enc = build_custom_encounter(
+            party_config=party,
+            enemy_specs=[
+                CustomEnemySpec(
+                    template_name="CUSTOM",
+                    name="Lone Magister Inquisitor",
+                    faction=Faction.MAGISTERS,
+                    race=Race.ELF,
+                    combat_role=Archetype.ROGUE,
+                    unit_tier="NORMAL",
+                    defense_profile="arcane",
+                    level_offset=1,
+                )
+            ],
+            encounter_type="STANDARD",
+            seed=42,
+        )
+
+        self.assertEqual(enc.encounter_type, EncounterType.BOSS)
+        self.assertEqual(len(enc.enemies), 1)
+        boss = enc.enemies[0]
+        self.assertEqual(boss.archetype, Archetype.BOSS)
+        self.assertEqual(boss.title, "Solo Boss / Overlord")
+        self.assertEqual(boss.race, Race.ELF)
+        self.assertEqual(boss.level, 7)
+        self.assertEqual(boss.stats.ap_start, 4)
+        self.assertEqual(boss.stats.ap_max, 6)
+        self.assertEqual(boss.stats.ap_recovery, 6)
+        self.assertGreaterEqual(boss.stats.combat_abilities.get("Perseverance", 0), 5)
+        self.assertIn("Walk It Off", boss.stats.talents)
+        self.assertIn("Comeback Kid", boss.stats.talents)
+        # Rogue class specialization preserved on Boss
+        self.assertGreater(boss.stats.finesse, boss.stats.strength)
+        self.assertIn("Flesh Sacrifice", [s.name for s in boss.skills])
+
+    def test_interactive_builder_dynamic_scaling_and_custom_roles(self):
+        """Verify dynamic EHP budget scaling as enemies are added in the Interactive Encounter Builder."""
+        from balancer_core.generator import build_custom_encounter
+
+        party = PartyConfig(level=8, party_size=4, difficulty=Difficulty.TACTICIAN, damage_profile=DamageProfile.BALANCED)
+
+        spec_fighter = {
+            "template_name": "CUSTOM",
+            "name": "Dwarf Vanguard",
+            "faction": "BANDITS",
+            "race": "DWARF",
+            "combat_role": "FIGHTER",
+            "unit_tier": "NORMAL",
+            "defense_profile": "ironclad",
+            "level_offset": 0,
+        }
+        spec_mage = {
+            "template_name": "CUSTOM",
+            "name": "Undead Lizard Pyromancer",
+            "faction": "UNDEAD",
+            "race": "UNDEAD_LIZARD",
+            "combat_role": "MAGE",
+            "unit_tier": "ELITE",
+            "defense_profile": "pyro",
+            "level_offset": 1,
+        }
+
+        # 2-enemy encounter vs 4-enemy encounter
+        enc_duo = build_custom_encounter(party, [spec_fighter, spec_mage], encounter_type="AUTO", seed=42)
+        enc_quad = build_custom_encounter(
+            party,
+            [spec_fighter, spec_mage, spec_fighter, spec_fighter],
+            encounter_type="AUTO",
+            seed=42,
+        )
+
+        # In a 2-enemy encounter, each unit receives a higher individual EHP buffer than in a 4-enemy encounter
+        self.assertGreater(
+            enc_duo.enemies[0].total_ehp,
+            enc_quad.enemies[0].total_ehp,
+            "Individual unit EHP should scale higher in a 2-enemy roster than in a 4-enemy roster to match party budget",
+        )
+
+        # Verify Elite Mage has higher level (+1 offset), Intelligence primary stat, and Undead Lizard racials
+        elite_mage = enc_duo.enemies[1]
+        self.assertEqual(elite_mage.level, 9)
+        self.assertEqual(elite_mage.race, Race.UNDEAD_LIZARD)
+        self.assertGreater(elite_mage.stats.intelligence, elite_mage.stats.strength)
+        mage_skills = [s.name for s in elite_mage.skills]
+        self.assertIn("Play Dead", mage_skills)
+        self.assertIn("Dragon's Blaze", mage_skills)
+
+    def test_web_gui_build_custom_endpoint(self):
+        """Verify POST /api/build_custom on the Web UI server."""
+        import threading
+        import json
+        import urllib.request
+        from balancer_core.web_gui import launch_web_gui
+
+        server = launch_web_gui(host="127.0.0.1", port=0, open_browser=False)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            base_url = f"http://127.0.0.1:{port}"
+
+            # 1. Single enemy payload -> automatically becomes Boss Encounter
+            solo_payload = json.dumps({
+                "party_size": 4,
+                "level": 5,
+                "is_lone_wolf": False,
+                "damage_profile": "BALANCED",
+                "difficulty": "BALANCED",
+                "encounter_type": "AUTO",
+                "enemies": [
+                    {
+                        "template_name": "CUSTOM",
+                        "name": "Arch-Demon Malphas",
+                        "faction": "DEMONS",
+                        "race": "DEMON",
+                        "combat_role": "BATTLEMAGE",
+                        "unit_tier": "NORMAL",
+                        "defense_profile": "pyro",
+                        "level_offset": 0,
+                    }
+                ],
+                "seed": 42,
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                f"{base_url}/api/build_custom",
+                data=solo_payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as resp:
+                self.assertEqual(resp.status, 200)
+                data = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(data["encounter_type_key"], "BOSS")
+                self.assertEqual(len(data["enemies"]), 1)
+                self.assertEqual(data["enemies"][0]["archetype_key"], "BOSS")
+                self.assertEqual(data["enemies"][0]["name"], "Arch-Demon Malphas")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_gm_mode_bear_templates_and_comprehensive_bestiary_npc_catalog(self):
+        """Verify GM Mode Bear templates (Black Bear, Grizzly Bear, Bear Cub, Alpha Dire Bear, Voidwoken Bear)
+        and ensure all official DOS2 GM Mode creature categories are fully available."""
+        from balancer_core.bestiary import find_template_by_name, get_templates_by_faction
+
+        # 1. Bear verification: Ensure normal combatant Bears and Boss Bears both exist
+        bear = find_template_by_name("Bear")
+        self.assertIsNotNone(bear, "A regular Bear template must exist in GM Mode bestiary")
+        self.assertEqual(bear.name, "Bear (Black Bear)")
+        self.assertEqual(bear.faction, Faction.BEASTS)
+        self.assertFalse(bear.can_be_boss, "Standard Bear must be eligible for normal skirmishes and minion rosters")
+
+        grizzly = find_template_by_name("Grizzly Bear")
+        self.assertIsNotNone(grizzly)
+        self.assertEqual(grizzly.faction, Faction.BEASTS)
+
+        bear_cub = find_template_by_name("Bear Cub")
+        self.assertIsNotNone(bear_cub)
+        self.assertTrue(bear_cub.can_be_minion)
+
+        alpha_bear = find_template_by_name("Alpha Dire Bear")
+        self.assertIsNotNone(alpha_bear)
+        self.assertTrue(alpha_bear.can_be_boss)
+
+        void_bear = find_template_by_name("Void-Touched Bear")
+        self.assertIsNotNone(void_bear)
+        self.assertEqual(void_bear.faction, Faction.VOIDWOKEN)
+
+        # 2. Verify all official DOS2 GM Mode creature categories under Faction.BEASTS
+        beast_templates = get_templates_by_faction(Faction.BEASTS)
+        beast_names = [t.name for t in beast_templates]
+
+        # Big cats, wolves, boars, deer, owls, rats
+        self.assertIn("Timber Wolf", beast_names)
+        self.assertIn("Forest Tiger", beast_names)
+        self.assertIn("Wild Boar", beast_names)
+        self.assertIn("War Owl", beast_names)
+        self.assertIn("Giant Rat", beast_names)
+
+        # Reptiles & Amphibians
+        self.assertIn("Saltwater Crocodile", beast_names)
+        self.assertIn("Fire Salamander", beast_names)
+        self.assertIn("Noxious Poison Salamander", beast_names)
+        self.assertIn("Ancient Giant Turtle", beast_names)
+        self.assertIn("Venomous Swamp Frog", beast_names)
+        self.assertIn("Giant Electric Frog", beast_names)
+
+        # Spiders, Insects, Beetles & Crabs
+        self.assertIn("Forest Crawler Spiderling", beast_names)
+        self.assertIn("Cursed Widow Spider", beast_names)
+        self.assertIn("Dune Beetle", beast_names)
+        self.assertIn("Giant Crab", beast_names)
+
+        # Slugs, Oozes & Plants
+        self.assertIn("Fire Slug", beast_names)
+        self.assertIn("Poison Ooze", beast_names)
+        self.assertIn("Shambling Mound (Poisonous Trunk)", beast_names)
+        self.assertIn("Hungry Carnivorous Flower", beast_names)
+
+        # Apex Bosses
+        self.assertIn("Mountain Troll Brute", beast_names)
+        self.assertIn("Lupine Nightmare Werewolf", beast_names)
+        self.assertIn("Frost Dragon", beast_names)
+
+        # 3. Standard encounter generation can pick standard Bear combatants
+        party = PartyConfig(level=4, party_size=4)
+        enc = generate_encounter(party, encounter_type=EncounterType.STANDARD, faction=Faction.BEASTS, seed=15)
+        self.assertEqual(enc.faction, Faction.BEASTS)
+        self.assertEqual(len(enc.enemies), 4)
+
+    def test_salamander_and_noxious_poison_salamander_lore_skills(self):
+        """
+        Verify that:
+        1. Normal Salamander does not receive Phoenix Dive (quadruped reptile without wings).
+        2. Normal Salamander defaults to authentic melee reptile skills (Battle Stomp, Crippling Blow, Bull Horns).
+        3. Noxious Poison Salamander defaults to authentic poison/acid abilities (Poison Dart, Contamination, Fossil Strike).
+        4. Noxious Poison Salamander combat abilities automatically align to Geomancer.
+        """
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+        party = PartyConfig(level=4, party_size=4)
+        specs = [
+            CustomEnemySpec(template_name="Salamander"),
+            CustomEnemySpec(template_name="Salamander"),
+            CustomEnemySpec(template_name="Noxious Poison Salamander"),
+            CustomEnemySpec(template_name="Noxious Poison Salamander"),
+        ]
+        enc = build_custom_encounter(party, specs)
+        self.assertEqual(len(enc.enemies), 4)
+
+        # Salamanders
+        salamander_1, salamander_2 = enc.enemies[0], enc.enemies[1]
+        for sal in (salamander_1, salamander_2):
+            sal_skill_names = [s.name for s in sal.skills]
+            self.assertNotIn("Phoenix Dive", sal_skill_names, "Quadruped creeping lizard should not have Phoenix Dive")
+            self.assertIn("Battle Stomp", sal_skill_names)
+            self.assertIn("Crippling Blow", sal_skill_names)
+            self.assertIn("Bull Horns", sal_skill_names)
+            self.assertGreater(sal.stats.combat_abilities.get("Warfare", 0), 0)
+
+        # Noxious Poison Salamanders
+        tox_1, tox_2 = enc.enemies[2], enc.enemies[3]
+        for tox in (tox_1, tox_2):
+            tox_skill_names = [s.name for s in tox.skills]
+            self.assertIn("Poison Dart", tox_skill_names)
+            self.assertIn("Contamination", tox_skill_names)
+            self.assertIn("Fossil Strike", tox_skill_names)
+            self.assertNotIn("Phoenix Dive", tox_skill_names)
+            self.assertGreater(tox.stats.combat_abilities.get("Geomancer", 0), 0)
+            self.assertEqual(tox.stats.combat_abilities.get("Pyrokinetic", 0), 0, "Poison salamander should not have Pyrokinetic")
+
+    def test_interactive_builder_custom_explicit_skills_and_memory_scaling(self):
+        """
+        Verify that:
+        1. Explicit skills assigned in CustomEnemySpec override default template skills.
+        2. Combat abilities align to the customized skill schools.
+        3. Memory attribute dynamically expands if explicit skills require more slots than base memory.
+        """
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+        party = PartyConfig(level=4, party_size=4)
+        # Give a normal unit 6 custom skills (exceeding base memory slots of 3 + 1 = 4)
+        specs = [
+            CustomEnemySpec(
+                template_name="Salamander",
+                skills=["Poison Dart", "Acid Spores", "Earthquake", "Contamination", "Fortify", "Fossil Strike"]
+            )
+        ]
+        enc = build_custom_encounter(party, specs)
+        unit = enc.enemies[0]
+        skill_names = [s.name for s in unit.skills]
+
+        for expected in ["Poison Dart", "Acid Spores", "Earthquake", "Contamination", "Fortify", "Fossil Strike"]:
+            self.assertIn(expected, skill_names)
+
+        # Combat abilities aligned to Geomancer
+        self.assertGreater(unit.stats.combat_abilities.get("Geomancer", 0), 0)
+        self.assertEqual(unit.stats.combat_abilities.get("Warfare", 0), 0)
+
+        # Memory capacity automatically accommodated
+        self.assertGreaterEqual(unit.max_memory_slots, unit.used_memory_slots)
+        self.assertGreaterEqual(unit.stats.memory, 13)
+
+    def test_web_gui_metadata_and_custom_skills_payload(self):
+        """
+        Verify that get_gui_metadata() exposes all_skills and skill_schools,
+        and build_custom_encounter_from_payload preserves explicit skills.
+        """
+        from balancer_core.web_gui import get_gui_metadata, build_custom_encounter_from_payload
+        meta = get_gui_metadata()
+        self.assertIn("all_skills", meta)
+        self.assertIn("skill_schools", meta)
+        self.assertGreater(len(meta["all_skills"]), 50)
+        self.assertIn("Geomancer", meta["skill_schools"])
+        self.assertIn("Warfare", meta["skill_schools"])
+
+        # Test build custom encounter from payload with skills
+        payload = {
+            "party_size": 4,
+            "level": 4,
+            "difficulty": "BALANCED",
+            "damage_profile": "BALANCED",
+            "enemies": [
+                {
+                    "template_name": "Salamander",
+                    "skills": ["Battle Stomp", "Crippling Blow", "Tentacle Lash"]
+                }
+            ]
+        }
+        enc = build_custom_encounter_from_payload(payload)
+        unit = enc.enemies[0]
+        skill_names = [s.name for s in unit.skills]
+        self.assertIn("Tentacle Lash", skill_names)
+        self.assertNotIn("Phoenix Dive", skill_names)
+        self.assertGreater(unit.stats.combat_abilities.get("Polymorph", 0), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

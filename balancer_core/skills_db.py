@@ -236,6 +236,19 @@ def is_skill_compatible_with_equipment(skill: Skill, equipment: Optional[str]) -
         if is_pure_ranged:
             return False
 
+    # Leap / mobility skills: Quadruped beasts and creeping reptiles without wings cannot leap/dive
+    leap_skills = {"Phoenix Dive", "Tactical Retreat", "Cloak and Dagger"}
+    if skill.name in leap_skills:
+        has_wings = any(w in eq_lower for w in ["wing", "feather", "fly", "glid"])
+        is_creeping_beast = any(
+            w in eq_lower for w in [
+                "jaw", "jaws", "tail", "claw", "claws", "paw", "paws", 
+                "scale", "scales", "carapace", "shell", "fur", "snout", "tusk", "creeping", "slither"
+            ]
+        ) and not any(w in eq_lower for w in ["boots", "sword", "bow", "blade", "staff", "wand"])
+        if is_creeping_beast and not has_wings:
+            return False
+
     return True
 
 
@@ -248,7 +261,8 @@ def extract_skills_from_tactics(ai_tactics: Optional[str]) -> List[Skill]:
     
     matches = []
     for name in sorted_names:
-        pattern = r'\b' + re.escape(name) + r'\b'
+        base_name = name.rstrip('s') if name.endswith('s') and len(name) > 4 else name
+        pattern = r'\b' + re.escape(base_name) + r'(?:s|es)?\b'
         match = re.search(pattern, ai_tactics, re.IGNORECASE)
         if match:
             matches.append((match.start(), skill_map[name]))
@@ -298,19 +312,11 @@ def get_skills_for_archetype(
         Archetype.MINION: ["Warfare", "Geomancer"],
     }
 
-    if archetype == Archetype.BOSS and class_archetype:
-        prefs = school_preferences.get(class_archetype, school_preferences[Archetype.BOSS])
+    if archetype in (Archetype.BOSS, Archetype.MINION) and class_archetype:
+        prefs = school_preferences.get(class_archetype, school_preferences[archetype])
     else:
         prefs = school_preferences.get(archetype, ["Warfare"])
     
-    # Candidate skills ordered by school preferences, filtered by equipment and tier
-    candidate_skills: List[Skill] = []
-    for school in prefs:
-        for s in SKILLS_DATABASE:
-            if s.school == school and s.tier != "Racial" and s.tier in allowed_tiers:
-                if is_skill_compatible_with_equipment(s, equipment) and s not in candidate_skills:
-                    candidate_skills.append(s)
-
     innate_selected: List[Skill] = []
     # 1. Racial / Innate abilities (DO NOT consume memorized skill slots)
     if race:
@@ -330,6 +336,22 @@ def get_skills_for_archetype(
         for t_skill in extract_skills_from_tactics(ai_tactics):
             if t_skill not in tactics_candidates:
                 tactics_candidates.append(t_skill)
+
+    # Prioritize schools the NPC explicitly specializes in via tactics/signature skills
+    present_schools: List[str] = []
+    for s in tactics_candidates:
+        if s.school not in present_schools and s.school != "Special":
+            present_schools.append(s.school)
+    
+    active_prefs = present_schools + [sch for sch in prefs if sch not in present_schools]
+
+    # Candidate skills ordered by active school preferences, filtered by equipment and tier
+    candidate_skills: List[Skill] = []
+    for school in active_prefs:
+        for s in SKILLS_DATABASE:
+            if s.school == school and s.tier != "Racial" and s.tier in allowed_tiers:
+                if is_skill_compatible_with_equipment(s, equipment) and s not in candidate_skills:
+                    candidate_skills.append(s)
 
     memorized_selected: List[Skill] = []
     for s in tactics_candidates:
