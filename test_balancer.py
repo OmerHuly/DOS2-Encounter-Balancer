@@ -1337,9 +1337,93 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
             self.assertEqual(npc.faction, Faction.BEASTS)
             self.assertEqual(npc.race, Race.CREATURE)
 
+    def test_web_gui_metadata_and_faction_race_filtering(self):
+        """Verify Web UI metadata payload and faction-specific race filtering."""
+        from balancer_core.web_gui import get_gui_metadata, get_valid_races_for_faction
+
+        meta = get_gui_metadata()
+        self.assertIn("factions", meta)
+        self.assertIn("faction_races", meta)
+        self.assertIn("encounter_types", meta)
+        self.assertIn("boss_templates", meta)
+        self.assertEqual(meta["encounter_types"][0], {"value": "RANDOM", "label": "Random"})
+
+        # Single-race factions (BEASTS, VOIDWOKEN, AUTOMATONS) must return empty race filter list
+        self.assertEqual(get_valid_races_for_faction(Faction.BEASTS), [])
+        self.assertEqual(get_valid_races_for_faction(Faction.VOIDWOKEN), [])
+        self.assertEqual(get_valid_races_for_faction(Faction.AUTOMATONS), [])
+
+        # Multi-racial factions must include 'ANY' plus only their valid races
+        magister_races = [r["value"] for r in get_valid_races_for_faction(Faction.MAGISTERS)]
+        self.assertIn("ANY", magister_races)
+        self.assertIn("HUMAN", magister_races)
+        self.assertIn("ELF", magister_races)
+        self.assertNotIn("DWARF", magister_races)
+
+    def test_web_gui_http_server_endpoints(self):
+        """Verify the local Web UI HTTP server serves the dashboard, /api/meta, and /api/generate."""
+        import threading
+        import json
+        import urllib.request
+        from balancer_core.web_gui import launch_web_gui
+
+        server = launch_web_gui(host="127.0.0.1", port=0, open_browser=False)
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        try:
+            base_url = f"http://127.0.0.1:{port}"
+
+            # 1. GET / serves the HTML dashboard
+            with urllib.request.urlopen(f"{base_url}/") as resp:
+                self.assertEqual(resp.status, 200)
+                html = resp.read().decode("utf-8")
+                self.assertIn("Divinity: Original Sin 2", html)
+
+            # 2. GET /api/meta returns JSON metadata
+            with urllib.request.urlopen(f"{base_url}/api/meta") as resp:
+                self.assertEqual(resp.status, 200)
+                meta = json.loads(resp.read().decode("utf-8"))
+                self.assertGreater(len(meta["boss_templates"]), 0)
+
+            # 3. POST /api/generate generates a complete encounter JSON with markdown & terminal cards
+            req_payload = json.dumps({
+                "party_size": 4,
+                "level": 5,
+                "is_lone_wolf": False,
+                "damage_profile": "BALANCED",
+                "difficulty": "BALANCED",
+                "encounter_type": "BOSS",
+                "faction": "BEASTS",
+                "race": "ANY",
+                "boss_template": "Mountain Troll",
+                "minion_count": 2,
+                "defense_profile": "troll",
+                "seed": 42,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{base_url}/api/generate",
+                data=req_payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as resp:
+                self.assertEqual(resp.status, 200)
+                enc_data = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(enc_data["encounter_type_key"], "BOSS")
+                self.assertEqual(len(enc_data["enemies"]), 3)
+                self.assertEqual(enc_data["enemies"][0]["name"], "Mountain Troll Brute")
+                self.assertIn("# DOS2 GM Battle Sheet:", enc_data["markdown"])
+                self.assertIn("DIVINITY: ORIGINAL SIN 2 - GM ENCOUNTER BALANCER", enc_data["terminal_text"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

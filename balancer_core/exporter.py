@@ -178,14 +178,8 @@ def format_encounter_terminal(encounter: Encounter) -> str:
     return "\n".join(output)
 
 
-def export_encounter_to_markdown(encounter: Encounter, output_dir: str = ".") -> str:
-    """Exports the complete encounter as a professional Markdown GM Battle Sheet."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    clean_faction = encounter.faction.name.lower()
-    clean_type = encounter.encounter_type.name.lower()
-    filename = f"encounter_lvl{encounter.party_config.level}_{clean_faction}_{clean_type}_{timestamp}.md"
-    filepath = os.path.join(output_dir, filename)
-
+def format_encounter_markdown(encounter: Encounter) -> str:
+    """Formats the complete encounter as a professional Markdown GM Battle Sheet string."""
     p = encounter.party_config
     a = encounter.analysis
 
@@ -298,7 +292,20 @@ def export_encounter_to_markdown(encounter: Encounter, output_dir: str = ".") ->
     content.append("5. **Place Hazards:** Drop the recommended barrels or create oil/water surfaces before triggering the encounter or de-cloaking ambushes.")
     content.append("")
 
+    return "\n".join(content)
+
+
+def export_encounter_to_markdown(encounter: Encounter, output_dir: str = ".") -> str:
+    """Exports the complete encounter as a professional Markdown GM Battle Sheet."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    clean_faction = encounter.faction.name.lower()
+    clean_type = encounter.encounter_type.name.lower()
+    filename = f"encounter_lvl{encounter.party_config.level}_{clean_faction}_{clean_type}_{timestamp}.md"
+    filepath = os.path.join(output_dir, filename)
+
+    md_text = format_encounter_markdown(encounter)
     with open(filepath, "w", encoding="utf-8") as f:
-        f.write("\n".join(content))
+        f.write(md_text)
 
     return filepath
+

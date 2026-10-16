@@ -43,6 +43,7 @@ from balancer_core import (
     get_templates_by_faction,
     search_templates,
     find_template_by_name,
+    launch_web_gui,
 )
 
 
@@ -483,6 +484,9 @@ def parse_cli_args():
         description="Divinity: Original Sin 2 GM Mode Encounter Balancer & Generator"
     )
     parser.add_argument("-i", "--interactive", action="store_true", help="Launch interactive wizard")
+    parser.add_argument("-g", "--gui", "--web", dest="gui", action="store_true", help="Launch local Web UI dashboard in browser")
+    parser.add_argument("--port", type=int, default=8765, help="Port for local Web UI server (default: 8765)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not automatically open browser when launching Web UI")
     parser.add_argument("--level", type=int, default=4, help="Party level (1-25)")
     parser.add_argument("--party-size", type=int, default=4, help="Number of party members (1-4)")
     parser.add_argument("--lone-wolf", action="store_true", help="Enable Lone Wolf talent modifiers")
@@ -563,6 +567,18 @@ def main():
         return
 
     args = parse_cli_args()
+
+    if args.gui:
+        server = launch_web_gui(
+            port=args.port,
+            output_dir=args.output_dir,
+            open_browser=not args.no_browser,
+        )
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
 
     if args.interactive:
         interactive_mode()

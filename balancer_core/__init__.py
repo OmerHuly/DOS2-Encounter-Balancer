@@ -50,7 +50,14 @@ from .generator import (
     DEFENSE_PROFILES,
     auto_detect_defense_profile,
 )
-from .exporter import format_encounter_terminal, export_encounter_to_markdown
+from .exporter import format_encounter_terminal, format_encounter_markdown, export_encounter_to_markdown
+from .web_gui import (
+    launch_web_gui,
+    get_gui_metadata,
+    get_valid_races_for_faction,
+    serialize_encounter,
+    build_encounter_from_payload,
+)
 
 __all__ = [
     "PartyConfig",
@@ -91,6 +98,13 @@ __all__ = [
     "DEFENSE_PROFILES",
     "auto_detect_defense_profile",
     "format_encounter_terminal",
+    "format_encounter_markdown",
     "export_encounter_to_markdown",
+    "launch_web_gui",
+    "get_gui_metadata",
+    "get_valid_races_for_faction",
+    "serialize_encounter",
+    "build_encounter_from_payload",
 ]
+
 

@@ -45,7 +45,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Spiked Mace + Round Wooden Shield",
         ai_tactics="Brawls in close quarters, uses Bouncing Shield and Battering Ram on closest player. Uses Encourage.",
-        gm_notes="Engine template: GM_Brute_Melee. Tough human mercenary brawler.",
+        gm_notes="Tough human mercenary brawler.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -56,7 +56,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Pair of Serrated Daggers",
         ai_tactics="Uses Cloak and Dagger from stealth, backstabs player spellcaster, applies Rupture Tendons and Adrenaline.",
-        gm_notes="Engine template: GM_BruteAssassin. High initiative backstab specialist.",
+        gm_notes="High initiative backstab specialist.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -67,7 +67,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Hunting Crossbow + Throwing Knives",
         ai_tactics="Fires Pin Down to stop player melee from approaching, then uses Sky Shot from high ground.",
-        gm_notes="Engine template: GM_Brute_Ranger. Equips oil and knockdown arrows.",
+        gm_notes="Equips oil and knockdown arrows.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -78,7 +78,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Warped Willow Wand + Poison Vial",
         ai_tactics="Casts Chloroform on physical damage dealers, casts Fossil Strike to slow and ignite the battlefield.",
-        gm_notes="Engine template: GM_Brute_Caster_Pyro. Chaotic spellcaster.",
+        gm_notes="Chaotic spellcaster.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -89,7 +89,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Two-Handed Greataxe + Spiked Shoulders",
         ai_tactics="Drinks stat potions, enrages himself for guaranteed critical hits, and cleaves through multiple party members.",
-        gm_notes="Engine template: GM_Brute_Tank. Outlaw leader with Executioner talent.",
+        gm_notes="Outlaw leader with Executioner talent.",
         can_be_boss=True
     ),
 
@@ -102,7 +102,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Dwarven Heavy Bulwark Shield + Stone Hammer",
         ai_tactics="High vitality and physical armor. Casts Petrifying Touch in melee and uses Shields Up when battered.",
-        gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A. Dwarf racial (+10% Vitality, Petrifying Touch).",
+        gm_notes="Dwarf racial (+10% Vitality, Petrifying Touch).",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -113,7 +113,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Dual Waraxes",
         ai_tactics="Charges in with Bull Horns, performs Whirlwind, and leverages high innate dodging.",
-        gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A (Brawler variant). Sturdy frontline dwarf.",
+        gm_notes="Sturdy frontline dwarf.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -124,7 +124,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Recurve Shortbow + Earth Arrows",
         ai_tactics="Takes high ground, fires Pin Down and Ricochet. Tougher to kill than human archers.",
-        gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A (Archer). Listed directly in english.xml.",
+        gm_notes="Listed directly in english.xml.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -135,7 +135,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Earth Runestone Staff",
         ai_tactics="Geomancy specialist: coats players in oil with Fossil Strike and petrifies with Petrifying Touch.",
-        gm_notes="Engine template: Dwarves_Female_Mage / Dwarves_Male_Clothing_Bandit_A. Earth/Geo caster.",
+        gm_notes="Earth/Geo caster.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -146,7 +146,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Dual Serrated Dwarven Daggers",
         ai_tactics="Flanks with The Pawn, applies Petrifying Touch to vulnerable targets, and backstabs backline casters.",
-        gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A (Rogue/Assassin variant).",
+        gm_notes="Agile dwarven rogue/assassin.",
         can_be_minion=False,
         signature_talents=["The Pawn"]
     ),
@@ -158,7 +158,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Two-Handed Dwarven Battleaxe + Spiked Armor",
         ai_tactics="Charges with Bull Horns, uses Petrifying Touch and Whirlwind. High vitality.",
-        gm_notes="Engine template: Dwarves_Male_Clothing_Bandit_A (Boss).",
+        gm_notes="Veteran dwarven bandit warlord.",
         can_be_boss=True
     ),
 
@@ -171,7 +171,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Elven Two-Handed Curved Greatsword",
         ai_tactics="Activates Flesh Sacrifice (+1 AP, +10% dmg) on Turn 1, then charges with Battering Ram and Whirlwind.",
-        gm_notes="Engine template: Elves_Female_Armor_Leather_A. High burst melee elf.",
+        gm_notes="High burst melee elf.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -182,7 +182,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Dual Needle Daggers",
         ai_tactics="Uses Flesh Sacrifice for extra AP, teleports behind casters with Backlash, applies Rupture Tendons.",
-        gm_notes="Engine template: Elves_Female_Armor_Leather_A (Rogue). Lethal elven assassin.",
+        gm_notes="Lethal elven assassin.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -193,7 +193,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Long Elven Yew Bow",
         ai_tactics="Flesh Sacrifice into Tactical Retreat to reach high ground. Rains Ballistic Shot and Marksman's Fang.",
-        gm_notes="Engine template: Elves_Female_Armor_Leather_A (Ranger). Sniper with AP boost.",
+        gm_notes="Sniper with AP boost.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -204,7 +204,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Hydro Wand + Shield",
         ai_tactics="Uses Flesh Sacrifice for bonus AP and damage, ignites ground with Ignition to trigger fire Elemental Affinity, and casts Fireball and Laser Ray at reduced AP cost.",
-        gm_notes="Engine template: Elves_Female_Armor_Mage. Leverages fire surface synergy.",
+        gm_notes="Leverages fire surface synergy.",
         can_be_boss=True,
         can_be_minion=False,
         signature_talents=["Elemental Affinity"]
@@ -217,7 +217,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Masterwork Elven Longbow + Poison Quiver",
         ai_tactics="Flesh Sacrifice into Tactical Retreat, rains Arrow Storm and Ballistic Shot.",
-        gm_notes="Engine template: Elves_Female_Armor_Leather_A (Boss).",
+        gm_notes="Elven outlaw sharpshooter captain.",
         can_be_boss=True
     ),
 
@@ -230,7 +230,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Curved Scimitar + Heavy Shield",
         ai_tactics="High Fire resistance. Breathes Dragon's Blaze on players to strip magic armor, then knocks down.",
-        gm_notes="Engine template: Lizards_Female_Armor_Leather_A. Dragon's Blaze fire cone.",
+        gm_notes="Dragon's Blaze fire cone.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -241,7 +241,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Twin Ceremonial Daggers",
         ai_tactics="High movement speed. Ignites surroundings with Dragon's Blaze, then backstabs retreating heroes.",
-        gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Rogue). Fast and agile skirmisher.",
+        gm_notes="Fast and agile skirmisher.",
         can_be_boss=True,
         can_be_minion=False
     ),
@@ -253,7 +253,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Twin Masterwork Dragon-Bone Daggers",
         ai_tactics="Lethal shadowblade assassin. Teleports with Cloak and Dagger, strikes from shadows with Backlash and Rupture Tendons, vanishes into Chameleon Cloak, and ignites survivors with Dragon's Blaze.",
-        gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Boss). Iconic Lizard Rogue / Assassin boss.",
+        gm_notes="Iconic Lizard Rogue / Assassin boss.",
         can_be_boss=True,
         can_be_minion=False,
         signature_skills=["Backlash", "Cloak and Dagger", "Rupture Tendons", "Chameleon Cloak", "Adrenaline", "Dragon's Blaze", "Sawtooth Blade"],
@@ -266,7 +266,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Empire Composite Bow",
         ai_tactics="Shoots fire arrows, sets fire surfaces, breathes fire on anyone who tries to engage in melee.",
-        gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Ranger). Fire archer.",
+        gm_notes="Fire archer.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -277,7 +277,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Incinerator Wand + Pyromancy Orb",
         ai_tactics="Pyrokinetic expert: casts Fireball, Searing Daggers, and Dragon's Blaze. High elemental resistance.",
-        gm_notes="Engine template: Lizards_Female_Armor_Mage. Lizard fire mage.",
+        gm_notes="Lizard fire mage.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -288,7 +288,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Blazing Scimitar + Greatshield",
         ai_tactics="Ignites the battlefield with Dragon's Blaze and Fireball, then executes with Warfare.",
-        gm_notes="Engine template: Lizards_Female_Armor_Leather_A (Boss).",
+        gm_notes="Pyrokinetic lizard commander.",
         can_be_boss=True
     ),
 
@@ -301,7 +301,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Rusty Cleaver + Splintered Buckler",
         ai_tactics="Healed by poison. Feigns death with Play Dead when low on HP. Uses Crippling Blow.",
-        gm_notes="Engine template: Undead_Skeleton_Axe_1H. Skeletal outlaw recruit.",
+        gm_notes="Skeletal outlaw recruit.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -312,7 +312,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Dual Bone Shivs",
         ai_tactics="Stealth assassin. Applies poison coating to blades, drops aggro with Play Dead if targeted.",
-        gm_notes="Engine template: Undead_Skeleton_Dagger_1H. Undead rogue.",
+        gm_notes="Undead rogue.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -323,7 +323,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Rotting Longbow + Venom Quiver",
         ai_tactics="Fires poison arrows to heal friendly undead while damaging player vitality.",
-        gm_notes="Engine template: Undead_Skeleton_Bow. Poison archer.",
+        gm_notes="Poison archer.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -334,7 +334,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Skull-Topped Staff",
         ai_tactics="Casts Contamination and Poison Darts, spreading poison across the battlefield.",
-        gm_notes="Engine template: Undead_Skeleton_Caster_Fire / Earth. Toxic caster.",
+        gm_notes="Toxic caster.",
         can_be_minion=False
     ),
 
@@ -351,7 +351,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Ancient Iron Sword + Rotted Shield",
         ai_tactics="Healed by poison surfaces; casts Play Dead if critically damaged to drop aggro. Knocks down enemies.",
-        gm_notes="Engine template: Undead_Skeleton_Axe_1H / Undead_FireSkeleton_2HAxe. Undead human swordsman.",
+        gm_notes="Undead human swordsman.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -362,7 +362,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Bone Bow + Poison Arrows",
         ai_tactics="Shoots poison arrows at enemies or down at friendly undead feet to heal them while poisoning players.",
-        gm_notes="Engine template: Undead_Skeleton_Bow / Undead_FireSkeleton_Ranger. Poison sniper.",
+        gm_notes="Poison sniper.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -373,7 +373,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Bone Wand + Hexing Skull",
         ai_tactics="Spits Poison Darts, casts Contamination, and casts Mosquito Swarm. Heals himself with poison.",
-        gm_notes="Engine template: Undead_Skeleton_Caster_Air / Undead_FireSkeleton_Mage. High magic armor.",
+        gm_notes="High magic armor.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -384,7 +384,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Heavy Two-Handed Scythe + Spiked Ribcage",
         ai_tactics="Taunts heroes, applies Retribution damage reflection, and uses Battle Stomp when armor is low.",
-        gm_notes="Engine template: Undead_Skeleton_Axe_2H. Heavy skeletal frontline.",
+        gm_notes="Heavy skeletal frontline.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -395,7 +395,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Two-Handed Ancient Cleaver + Spiked Ribs",
         ai_tactics="Commands undead thralls, leaps with Phoenix Dive, casts Play Dead and Whirlwind.",
-        gm_notes="Engine template: Undead_Skeleton_Axe_2H (Boss).",
+        gm_notes="Skeletal legion commander.",
         can_be_boss=True
     ),
 
@@ -408,7 +408,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Ancient Elven Glaive",
         ai_tactics="Uses Flesh Sacrifice for extra AP, charges into party with Battering Ram and Whirlwind.",
-        gm_notes="Engine template: Elves_Female_Skeleton_A. Skeletal elf warrior with Flesh Sacrifice.",
+        gm_notes="Skeletal elf warrior with Flesh Sacrifice.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -419,7 +419,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Cursed Obsidian Daggers",
         ai_tactics="Lethal assassin. Casts Flesh Sacrifice to get extra AP, teleports behind targets with Backlash.",
-        gm_notes="Engine template: Elves_Hero_Female_Undead. Undead elf assassin.",
+        gm_notes="Undead elf assassin.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -430,7 +430,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Elven Skeletal Bow",
         ai_tactics="Combines Flesh Sacrifice with Tactical Retreat to seize elevated terrain. Rains poison arrows.",
-        gm_notes="Engine template: Elves_Female_Skeleton_A (Ranger). Undead elf archer.",
+        gm_notes="Undead elf archer.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -441,7 +441,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Staff of the Dead Ancestors",
         ai_tactics="Creates blood surfaces with Flesh Sacrifice, casts Grasp of the Starved and Decaying Touch.",
-        gm_notes="Engine template: Elves_Female_Skeleton_Mage_A. Blood and decay caster.",
+        gm_notes="Blood and decay caster.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -452,7 +452,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Staff of Ancient Roots + Bone Circlet",
         ai_tactics="Flesh Sacrifice into Grasp of the Starved, casts Play Dead when threatened.",
-        gm_notes="Engine template: Elves_Female_Skeleton_Mage_A (Boss).",
+        gm_notes="Ancient elven necromancer lord.",
         can_be_boss=True
     ),
 
@@ -465,7 +465,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Skeletal Dwarven Greathammer",
         ai_tactics="Crushing blows, high vitality, casts Petrifying Touch to freeze targets stripped of magic armor.",
-        gm_notes="Engine template: Dwarves_Female_Skeleton_A. Sturdy undead dwarf brawler.",
+        gm_notes="Sturdy undead dwarf brawler.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -476,7 +476,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Ancient Dwarven Tomb Shield + Mace",
         ai_tactics="Massive armor pool. Uses Shields Up and Fortify to create an impenetrable defensive vanguard.",
-        gm_notes="Engine template: Dwarves_Female_Skeleton_A (Tank). Tough skeletal defender.",
+        gm_notes="Tough skeletal defender.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -487,7 +487,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Twin Tomb Daggers",
         ai_tactics="Sneaks through combat, applies Petrifying Touch and backstabs vulnerable backline characters.",
-        gm_notes="Engine template: Dwarves_Female_Skeleton_A (Rogue). Undead dwarf assassin.",
+        gm_notes="Undead dwarf assassin.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -498,7 +498,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Skeletal Earth Wand",
         ai_tactics="Geomancy spells: shoots poison darts and oil boulders, turns the arena into a hazardous zone.",
-        gm_notes="Engine template: Dwarves_Female_Skeleton_A (Mage). Earth elementalist.",
+        gm_notes="Earth elementalist.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -509,7 +509,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Skeletal Dwarven Greathammer + Crypt Shield",
         ai_tactics="Immense durability, uses Petrifying Touch and Battle Stomp to lock down party.",
-        gm_notes="Engine template: Dwarves_Female_Skeleton_A (Boss).",
+        gm_notes="Ancient dwarven crypt monarch.",
         can_be_boss=True
     ),
 
@@ -522,7 +522,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Ancient Lizard Blade + Tower Shield",
         ai_tactics="Breathes Dragon's Blaze to ignite oil and players, charges with Battering Ram.",
-        gm_notes="Engine template: Lizards_Female_Skeleton_A. Undead lizard with Dragon's Blaze.",
+        gm_notes="Undead lizard with Dragon's Blaze.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -533,7 +533,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Twin Cursed Daggers",
         ai_tactics="Fast movement. Teleports with Cloak and Dagger, breathes fire, and inflicts Rupture Tendons.",
-        gm_notes="Engine template: Lizards_Hero_Female_Undead. High mobility undead lizard.",
+        gm_notes="High mobility undead lizard.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -544,7 +544,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Ancient Reptilian Bow",
         ai_tactics="Long range poison and fire arrows. Uses Dragon's Blaze as close-quarters defense.",
-        gm_notes="Engine template: Lizards_Female_Skeleton_A (Ranger). Fire/Poison hybrid archer.",
+        gm_notes="Fire/Poison hybrid archer.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -555,7 +555,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Skeletal Pyro Staff",
         ai_tactics="Combines Pyromancy with Geomancy. Immune to fire and poison surfaces.",
-        gm_notes="Engine template: Lizards_Female_Skeleton_Mage_A. High magic armor.",
+        gm_notes="High magic armor.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -566,7 +566,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Flaming Skeletal Glaive + Obsidian Crest",
         ai_tactics="Dragon's Blaze into Fireball, creates massive cursed fire zones.",
-        gm_notes="Engine template: Lizards_Female_Skeleton_Mage_A (Boss).",
+        gm_notes="Ancient lizard empire undead ruler.",
         can_be_boss=True
     ),
 
@@ -579,7 +579,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Spiked Morningstar + Tower Shield",
         ai_tactics="Taunts heroes, applies Retribution damage reflection, and uses Battle Stomp when armor is low.",
-        gm_notes="Engine template: GEN_GM_GenericTank with Black Ring tag. God King vanguard.",
+        gm_notes="God King vanguard.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -590,7 +590,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BATTLEMAGE,
         equipment="Cursed Obsidian Blade + Shadow Focus",
         ai_tactics="Casts Raining Blood followed by Grasp of the Starved. Uses Living on the Edge when dropping to 1 HP.",
-        gm_notes="Engine template: GM_Brute_Caster_Terra with Necromancer spells. Extremely lethal in blood.",
+        gm_notes="Necromancer spells; extremely lethal in blood.",
         can_be_boss=True
     ),
     BestiaryTemplate(
@@ -601,7 +601,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Colossal Fused Bone Fists",
         ai_tactics="Absorbs nearby corpses with Bone Cage for massive physical armor spikes, then slams ground for AoE knockdown.",
-        gm_notes="Engine template: Undead_Bonepile_Troll_A / Undead_Bonepile_Spider_A. Fused bone monstrosity.",
+        gm_notes="Fused bone monstrosity.",
         can_be_boss=True
     ),
 
@@ -616,7 +616,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="One-handed Longsword + Divine Steel Shield",
         ai_tactics="Engages frontliners, uses Battering Ram to knock down targets stripped of physical armor. Uses Shields Up.",
-        gm_notes="Engine template: GM_Magister_Melee. Standard Divine Order soldier.",
+        gm_notes="Standard Divine Order soldier.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -627,7 +627,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Refined Composite Bow + Quiver of Knockdown/Poison Arrows",
         ai_tactics="Prioritizes high-ground platforms immediately with Tactical Retreat. Snipes squishy mages with Ballistic Shot.",
-        gm_notes="Engine template: GM_Magister_Ranger. High Ground sniper.",
+        gm_notes="High Ground sniper.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -638,7 +638,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Glacial Water Staff + Cloth Robes",
         ai_tactics="Casts Rain to make party Wet, then freezes with Hail Strike or Winter Blast. Clears CC with Armor of Frost.",
-        gm_notes="Engine template: GM_Magister_Caster_Cryo. Specialized water/ice control caster.",
+        gm_notes="Specialized water/ice control caster.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -649,7 +649,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Scorching Fire Wand + Shield",
         ai_tactics="Ignites oil surfaces and players with Fireball and Searing Daggers. Uses Peace of Mind to buff allies.",
-        gm_notes="Engine template: GM_Magister_Caster_Pyro. Fiery area denial.",
+        gm_notes="Fiery area denial.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -660,7 +660,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BATTLEMAGE,
         equipment="Two-Handed Greatsword + Plate Armor",
         ai_tactics="Blends Warfare cleaves with Necromancy. Casts Mosquito Swarm from range, then charges in with Decaying Touch.",
-        gm_notes="Engine template: GM_Magister_Melee_Strong. Decaying Touch turns player healing into lethal damage.",
+        gm_notes="Decaying Touch turns player healing into lethal damage.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -671,7 +671,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Dual Purged Daggers",
         ai_tactics="Fast footwork, immune to Silenced. Flanks party backline, applies Rupture Tendons and Backlash.",
-        gm_notes="Engine template: Creatures_Purged_A / GM_Magister_Rogue. Soulless purged fighter.",
+        gm_notes="Soulless purged fighter.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -682,7 +682,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Twin Purged Blades",
         ai_tactics="Extremely rapid movement. Uses Flesh Sacrifice and Backlash to stunlock squishy mages.",
-        gm_notes="Engine template: Elves_Female_Silentmonk_A. Elven variant of the Silent Monk.",
+        gm_notes="Elven variant of the Silent Monk.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -693,7 +693,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Purged Scimitar + Shield",
         ai_tactics="Breathes Dragon's Blaze to trigger fire traps, charges into player frontlines.",
-        gm_notes="Engine template: Lizards_Female_Silentmonk_A. Lizard variant of the Silent Monk.",
+        gm_notes="Lizard variant of the Silent Monk.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -704,7 +704,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Monstrous Claw Blades",
         ai_tactics="Lethal assassin with extreme AP efficiency. Teleports behind lowest physical armor hero, backstabs relentlessly.",
-        gm_notes="Engine template: Creatures_Gheist_A. Terrifying mutated bioweapon.",
+        gm_notes="Terrifying mutated bioweapon.",
         can_be_boss=False
     ),
     BestiaryTemplate(
@@ -715,7 +715,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Lucian Holy Greatshield + Blessed Mace",
         ai_tactics="Shields allies, Taunts enemy martial characters, and casts Fortify to purge debuffs.",
-        gm_notes="Engine template: GM_Paladin_Melee_Strong. Order of the Divine paladin; heavy physical vanguard.",
+        gm_notes="Order of the Divine paladin; heavy physical vanguard.",
         can_be_boss=False
     ),
     BestiaryTemplate(
@@ -726,7 +726,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Divine Order Longbow",
         ai_tactics="Snipes from fortified positions, fires holy-enchanted arrows and pins down threats.",
-        gm_notes="Engine template: GM_Paladin_Ranger. High precision ranged support.",
+        gm_notes="High precision ranged support.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -737,7 +737,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Enchanted Divine Greatblade + Ornate Gold Plate",
         ai_tactics="Leads from the front with Overpower, Leadership aura, and Phoenix Dive. Coordinates target focus.",
-        gm_notes="Engine template: GM_Magister_Caster_Strong / GM_Paladin_Caster_Strong. Boss with 6 AP per turn.",
+        gm_notes="Boss with up to 6 AP per turn.",
         can_be_boss=True
     ),
 
@@ -752,7 +752,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MINION,
         equipment="Venomous Mandibles",
         ai_tactics="Swarm tactic: rushes closest target in numbers. Explodes on death in cursed necrofire or acid puddle.",
-        gm_notes="Engine template: Animals_Voidling / Animals_Voidwoken_VolatileVoidling. Fragile swarm minion.",
+        gm_notes="Fragile swarm minion.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -763,7 +763,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Corrosive Acid Spittle",
         ai_tactics="Leaps across platforms, spits caustic poison pools that corrode physical armor.",
-        gm_notes="Engine template: Animals_Voidwoken_Frog_A. Native GM void creature with ranged acid attacks.",
+        gm_notes="Native GM void creature with ranged acid attacks.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -774,7 +774,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Corrupted Claws & Spikes",
         ai_tactics="Leaps over frontline tanks straight onto vulnerable mages. Applies Crippled and Bleeding with claw strikes.",
-        gm_notes="Engine template: Animals_Deer_A_Void_A / Animals_Wolf_A_Voidwoken. Fast leaping corrupted beast.",
+        gm_notes="Fast leaping corrupted beast.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -785,7 +785,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Ancient Void Staff & Cursed Tendrils",
         ai_tactics="Opens with Shackles of Pain on highest DPS player, then casts Grasp of the Starved and Decaying Touch.",
-        gm_notes="Engine template: Animals_Voidwoken_Merman_A / Voidwoken_Alan_A_Boss. Dangerous caster boss.",
+        gm_notes="Dangerous caster boss.",
         can_be_boss=True
     ),
     BestiaryTemplate(
@@ -796,7 +796,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Armored Carapace & Chitinous Fists",
         ai_tactics="Heavy brawler. Charges through frontline with Battering Ram and casts Earthquake to disrupt entire party.",
-        gm_notes="Engine template: Animals_Voidwoken_Drillworm_Hatchling. Immense Physical Armor and burrowing power.",
+        gm_notes="Immense Physical Armor and burrowing power.",
         can_be_boss=True
     ),
 
@@ -811,7 +811,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MINION,
         equipment="Razor Fangs",
         ai_tactics="Coordinates with pack members, flanks isolated heroes, inflicts Crippled and Bleeding.",
-        gm_notes="Engine template: Animals_Wolf_A_Black / Animals_Wolf_A_White. Deploy in packs of 3 to 6.",
+        gm_notes="Deploy in packs of 3 to 6.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -822,7 +822,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.ROGUE,
         equipment="Venomous Fangs & Spinnerets",
         ai_tactics="Spins Spider Web on players to entrap them, then spits corrosive poison darts.",
-        gm_notes="Engine template: GM_Spider_Easy / Animals_Spider_Poison. Entangles players ignoring physical armor.",
+        gm_notes="Entangles players ignoring physical armor.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -833,7 +833,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Gargantuan Claws & Thick Fur",
         ai_tactics="Massive vitality pool. Roars to terrify players, swipes with heavy physical cleaves.",
-        gm_notes="Engine template: GM_Bear_Easy / Animals_Bear_A. High vitality beast guardian.",
+        gm_notes="High vitality beast guardian.",
         can_be_boss=True
     ),
     BestiaryTemplate(
@@ -844,7 +844,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Molten Magma Carapace",
         ai_tactics="Oozes continuous fire trails, casts Supernova, and heals when submerged in fire.",
-        gm_notes="Engine template: GM_FireSlug_Boss (Grunts: GM_FireSlug_Grunt). Native GM boss creature.",
+        gm_notes="Native GM boss creature.",
         can_be_boss=True
     ),
     BestiaryTemplate(
@@ -855,7 +855,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Blazing Core",
         ai_tactics="Immune to and healed by Fire. Casts Fireball, Supernova, and ignites all surrounding surfaces.",
-        gm_notes="Engine template: Creatures_Elemental_A_Fire. Living embodiment of flame.",
+        gm_notes="Living embodiment of flame.",
         can_be_boss=False
     ),
     # --- Trolls (Available in DOS2 GM Mode NPC Catalog: Mountain & Forest Trolls) ---
@@ -867,7 +867,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Colossal Stone Club + Thick Hides",
         ai_tactics="Devastating frontline brute. Uses Battle Stomp to knock down players, hurls boulders with Fossil Strike, and regenerates massive Vitality with Troll Blood (nullified by Fire/Burning).",
-        gm_notes="Engine template: Troll_Mountain_A (Official DOS2 GM Mode Mountain Troll). Weakness: Fire/Burning deactivates Troll Blood regeneration.",
+        gm_notes="Official DOS2 GM Mode Mountain Troll. Weakness: Fire/Burning deactivates Troll Blood regeneration.",
         can_be_boss=True,
         can_be_minion=False,
         signature_skills=["Battle Stomp", "Fossil Strike", "Battering Ram", "Earthquake", "Troll Blood (Fire Weakness)"],
@@ -880,7 +880,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Ancient Ironbound Log + Moss Armor",
         ai_tactics="Crushes frontline with Overpower and Whirlwind, roots players with Worm Tremor, and shrugs off attacks with Heart of Steel and Troll Blood.",
-        gm_notes="Engine template: Troll_Forest_A / Trolls_Male (Official DOS2 GM Mode Forest Troll). Legendary forest wanderer with massive HP and cleave.",
+        gm_notes="Official DOS2 GM Mode Forest Troll. Legendary forest wanderer with massive HP and cleave.",
         can_be_boss=True,
         can_be_minion=False,
         signature_skills=["Overpower", "Whirlwind", "Battle Stomp", "Heart of Steel", "Worm Tremor", "Troll Blood"],
@@ -897,7 +897,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.FIGHTER,
         equipment="Burning Hell-Blades",
         ai_tactics="Sprouts wings to fly into player rear lines, slashes with fire-infused melee strikes.",
-        gm_notes="Engine template: GM_Fire_Demon. Hostile Netherworld fiend; fire immune.",
+        gm_notes="Hostile Netherworld fiend; fire immune.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -908,7 +908,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Cursed Blood Talons",
         ai_tactics="Drains vitality with Mosquito Swarm, casts Raining Blood, and inflicts Decaying Touch.",
-        gm_notes="Engine template: GM_Blood_Demon. Specialized necromantic demon in GM mode.",
+        gm_notes="Specialized necromantic demon in GM mode.",
         can_be_boss=False
     ),
     BestiaryTemplate(
@@ -919,7 +919,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MAGE,
         equipment="Crackling Arcane Wand",
         ai_tactics="Casts Chain Lightning and Electric Discharge. Stuns wet or shocked players.",
-        gm_notes="Engine template: GM_Electric_Demon. High air magic and shock damage.",
+        gm_notes="High air magic and shock damage.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -930,7 +930,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.MINION,
         equipment="Sacrificial Kris Dagger",
         ai_tactics="Rushes heroes and casts Blood Sacrifice. Explodes on death in toxic cursed fluid.",
-        gm_notes="Engine template: GM_Poison_Demon / GM_Oil_Demon. Suicide rush fanatic.",
+        gm_notes="Suicide rush fanatic.",
         can_be_minion=True
     ),
     BestiaryTemplate(
@@ -941,7 +941,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Obsidian Greatsword + Demonic Wings",
         ai_tactics="Radiates Demonic Aura. Casts Chain Lightning, Epidemic of Fire, and strikes with devastating cleaves.",
-        gm_notes="Engine template: Creatures_Demon_Grunt_A with boss scaling. 6 AP turns.",
+        gm_notes="Arch-demon boss with up to 6 AP turns.",
         can_be_boss=True
     ),
 
@@ -956,7 +956,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.TANK,
         equipment="Heavy Brass Tower Shield + Shock Baton",
         ai_tactics="Immune to Bleeding and Poison. Uses Deflective Barrier and Shield Bash to protect allies.",
-        gm_notes="Engine template: Creatures_Raanaar_Automaton_A. Authentic ancient automaton in GM RootTemplates.",
+        gm_notes="Authentic ancient automaton guardian.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -967,7 +967,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.RANGER,
         equipment="Mounted Triple-Repeater Ballista",
         ai_tactics="Stationary or slow-moving artillery. Fires heavy piercing bolts with long range and high ground simulation.",
-        gm_notes="Engine template: Creatures_Raanaar_Automaton_B. Heavy physical ranged pressure.",
+        gm_notes="Heavy physical ranged pressure.",
         can_be_minion=False
     ),
     BestiaryTemplate(
@@ -978,7 +978,7 @@ BESTIARY: List[BestiaryTemplate] = [
         archetype=Archetype.BOSS,
         equipment="Colossal Steam Pistons & Kinetic Core",
         ai_tactics="Crushes players with Ground Slam, emits EMP shockwaves that silence and shock nearby heroes.",
-        gm_notes="Engine template: Creatures_Raanaar_Automaton_A (Boss variant). Massive mechanical dungeon guardian.",
+        gm_notes="Massive mechanical dungeon guardian.",
         can_be_boss=True
     ),
 ]

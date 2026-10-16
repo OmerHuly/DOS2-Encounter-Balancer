@@ -898,7 +898,7 @@ def generate_encounter(
             candidates = unrepresented if unrepresented else matching
             template = random.choice(candidates) if candidates else random.choice(templates)
             
-            enemies.append(_create_npc(template, party_lvl, party_config, title=f"Unit #{i+1}"))
+            enemies.append(_create_npc(template, party_lvl, party_config, title="Combatant"))
 
     elif encounter_type == EncounterType.BOSS:
         # Resolve Boss Template (specifically selected or randomized)
@@ -972,7 +972,7 @@ def generate_encounter(
             tpl = random.choice(candidates)
 
             minion_level = max(1, party_lvl + scaling.minion_level_offset)
-            minion_title = "Elite Lieutenant" if actual_minions == 1 else f"Minion #{i+1}"
+            minion_title = "Elite Lieutenant" if actual_minions == 1 else "Minion"
             enemies.append(_create_npc(
                 tpl, 
                 minion_level, 
@@ -1001,7 +1001,7 @@ def generate_encounter(
                 tpl, 
                 swarmer_level, 
                 party_config, 
-                title=f"Swarmer #{i+1}", 
+                title="Swarmer", 
                 archetype=Archetype.MINION, 
                 max_slots=2
             ))
@@ -1021,7 +1021,7 @@ def generate_encounter(
                 tpl, 
                 champ_level, 
                 party_config, 
-                title=f"Champion #{i+1}", 
+                title="Champion", 
                 name_prefix="Elite ", 
                 max_slots=5, 
                 armor_multiplier=1.25,
