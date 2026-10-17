@@ -96,14 +96,34 @@ class Skill:
     description: str
     status_applied: Optional[str] = None
     memory_cost: int = 1
+    required_abilities: Dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self):
-        if self.tier == "Racial":
+        if self.tier == "Racial" or self.school in ("Special", "Racial"):
             self.memory_cost = 0
+            self.required_abilities = {}
+        elif not self.required_abilities:
+            if self.name == "Overpower":
+                self.required_abilities = {"Warfare": 5}
+            elif self.tier == "Novice":
+                self.required_abilities = {self.school: 1}
+            elif self.tier == "Adept":
+                self.required_abilities = {self.school: 2}
+            elif self.tier in ("Expert", "Master"):
+                self.required_abilities = {self.school: 3}
+            else:
+                self.required_abilities = {self.school: 1}
 
     @property
     def is_innate(self) -> bool:
         return self.memory_cost == 0 or self.tier == "Racial"
+
+    @property
+    def requirements_display(self) -> str:
+        """Returns human-readable ability requirement string, e.g. 'Necromancer 1, Hydrosophist 1'."""
+        if not self.required_abilities:
+            return "Innate" if self.is_innate else "None"
+        return ", ".join(f"{school} {pts}" for school, pts in self.required_abilities.items())
 
 
 @dataclass

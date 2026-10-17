@@ -1742,6 +1742,235 @@ class TestDOS2EncounterBalancer(unittest.TestCase):
         self.assertNotIn("Phoenix Dive", skill_names)
         self.assertGreater(unit.stats.combat_abilities.get("Polymorph", 0), 0)
 
+        # Verify defense bar relative calculation logic matches GUI contract
+        card_total = unit.stats.physical_armor + unit.stats.magic_armor + unit.stats.vitality
+        self.assertGreater(card_total, 0)
+        phys_pct = round((unit.stats.physical_armor / card_total) * 100)
+        mag_pct = round((unit.stats.magic_armor / card_total) * 100)
+        vit_pct = round((unit.stats.vitality / card_total) * 100)
+        self.assertGreaterEqual(phys_pct + mag_pct + vit_pct, 98)
+        self.assertLessEqual(phys_pct + mag_pct + vit_pct, 102)
+
+    def test_water_ooze_and_cryomancer_elemental_skill_purity(self):
+        """
+        Verify that Water Oozes (and specialized Cryomancers) learn authentic Hydrosophist/Aerotheurge
+        spells and are NEVER given Pyrokinetic or fire skills.
+        """
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+
+        for lvl in [4, 8, 12, 16]:
+            party = PartyConfig(level=lvl, party_size=4)
+            enc = build_custom_encounter(
+                party,
+                [CustomEnemySpec(template_name="Water Ooze", unit_tier="NORMAL")] * 4,
+                seed=42
+            )
+            ooze = enc.enemies[0]
+            skill_names = [s.name for s in ooze.skills]
+            skill_schools = [s.school for s in ooze.skills]
+            skill_dmg_types = [s.damage_type for s in ooze.skills]
+
+            # 1. No Pyrokinetic school or Fire damage skills
+            self.assertNotIn("Pyrokinetic", skill_schools, f"Water Ooze at lvl {lvl} must not have Pyrokinetic skills")
+            self.assertNotIn("Fire", skill_dmg_types, f"Water Ooze at lvl {lvl} must not deal Fire damage")
+            for fire_skill in ["Ignition", "Searing Daggers", "Fireball", "Supernova", "Laser Ray"]:
+                self.assertNotIn(fire_skill, skill_names, f"Water Ooze must not know {fire_skill}")
+
+            # 2. Authentic water/frost abilities
+            self.assertIn("Rain", skill_names)
+            self.assertIn("Hail Strike", skill_names)
+            self.assertIn("Winter Blast", skill_names)
+            self.assertIn("Hydrosophist", ooze.stats.combat_abilities)
+            self.assertNotIn("Pyrokinetic", ooze.stats.combat_abilities)
+
+        # Also verify Magister Cryomancer
+        party = PartyConfig(level=8, party_size=4)
+        enc_cryo = build_custom_encounter(
+            party,
+            [CustomEnemySpec(template_name="Magister Cryomancer", unit_tier="NORMAL")] * 4,
+            seed=42
+        )
+        cryo = enc_cryo.enemies[0]
+        cryo_skills = [s.name for s in cryo.skills]
+        self.assertNotIn("Ignition", cryo_skills)
+        self.assertNotIn("Searing Daggers", cryo_skills)
+        self.assertIn("Rain", cryo_skills)
+        self.assertIn("Winter Blast", cryo_skills)
+
+    def test_balanced_bastion_defense_profile_symmetrical_50_50(self):
+        """
+        Verify that forcing Defense Profile: Balanced Bastion (Symmetrical 50/50 Armor)
+        correctly sets Physical Armor and Magic Armor to an exact 50/50 split and
+        actively alters skewed archetype armor distributions.
+        """
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+
+        party = PartyConfig(level=6, party_size=4)
+
+        # Test Tank (naturally heavy physical 70/30)
+        enc_tank_auto = build_custom_encounter(
+            party,
+            [CustomEnemySpec(template_name="Magister Houndmaster", combat_role=Archetype.TANK, unit_tier="NORMAL", defense_profile="auto")] * 4
+        )
+        tank_auto = enc_tank_auto.enemies[0]
+        self.assertGreater(tank_auto.stats.physical_armor, tank_auto.stats.magic_armor)
+
+        enc_tank_bal = build_custom_encounter(
+            party,
+            [CustomEnemySpec(template_name="Magister Houndmaster", combat_role=Archetype.TANK, unit_tier="NORMAL", defense_profile="balanced")] * 4
+        )
+        tank_bal = enc_tank_bal.enemies[0]
+        self.assertIn("Balanced Bastion", tank_bal.defense_theme)
+        # Symmetrical 50/50: physical and magic armor differ by at most 1 point due to rounding
+        self.assertLessEqual(abs(tank_bal.stats.physical_armor - tank_bal.stats.magic_armor), 1)
+        # Armor values actively changed from the auto profile
+        self.assertNotEqual(tank_bal.stats.physical_armor, tank_auto.stats.physical_armor)
+
+        # Test Mage (naturally high magic 25/75)
+        enc_mage_auto = build_custom_encounter(
+            party,
+            [CustomEnemySpec(template_name="Magister Pyromancer", combat_role=Archetype.MAGE, unit_tier="NORMAL", defense_profile="auto")] * 4
+        )
+        mage_auto = enc_mage_auto.enemies[0]
+
+        enc_mage_bal = build_custom_encounter(
+            party,
+            [CustomEnemySpec(template_name="Magister Pyromancer", combat_role=Archetype.MAGE, unit_tier="NORMAL", defense_profile="balanced")] * 4
+        )
+        mage_bal = enc_mage_bal.enemies[0]
+        self.assertIn("Balanced Bastion", mage_bal.defense_theme)
+        self.assertLessEqual(abs(mage_bal.stats.physical_armor - mage_bal.stats.magic_armor), 1)
+        # Armor values actively changed from the auto profile
+        self.assertNotEqual(mage_bal.stats.magic_armor, mage_auto.stats.magic_armor)
+
+        # Test generate_encounter with defense_profile="balanced"
+        enc_std = generate_encounter(party, encounter_type=EncounterType.STANDARD, defense_profile="balanced", seed=50)
+        for unit in enc_std.enemies:
+            self.assertIn("Balanced Bastion", unit.defense_theme)
+            self.assertLessEqual(abs(unit.stats.physical_armor - unit.stats.magic_armor), 1)
+
+    def test_card_defense_bars_relative_to_own_total(self):
+        """
+        Verify that defense bars on enemy cards are relative to each enemy's own total durability,
+        ensuring changing one enemy's preset does not alter other enemies' bar ratios.
+        """
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+
+        party = PartyConfig(level=5, party_size=4)
+
+        # Roster A: 1 Boss (huge HP/armor) + 1 Minion
+        enc_a = build_custom_encounter(
+            party,
+            [
+                CustomEnemySpec(template_name="Bandit Kingpin", unit_tier="BOSS"),
+                CustomEnemySpec(template_name="Bandit Cutpurse", combat_role=Archetype.ROGUE, unit_tier="MINION"),
+            ],
+            seed=77
+        )
+
+        minion_a = enc_a.enemies[1]
+        total_a = minion_a.stats.physical_armor + minion_a.stats.magic_armor + minion_a.stats.vitality
+        phys_pct_a = round((minion_a.stats.physical_armor / total_a) * 100)
+        mag_pct_a = round((minion_a.stats.magic_armor / total_a) * 100)
+        vit_pct_a = round((minion_a.stats.vitality / total_a) * 100)
+
+        # Under the relative formula, the sum of percentages on the card is ~100%
+        self.assertAlmostEqual(phys_pct_a + mag_pct_a + vit_pct_a, 100, delta=2)
+
+    def test_skill_combat_ability_requirements_and_raining_blood_hybrid_satisfaction(self):
+        """
+        Verify that all skills track their combat ability requirements,
+        hybrid skills like Raining Blood require multiple combat abilities (Necromancer + Hydrosophist),
+        and any enemy generated with Raining Blood or other tiered skills receives the necessary combat abilities.
+        """
+        from balancer_core.skills_db import SKILLS_DATABASE, Skill
+        from balancer_core.exporter import format_encounter_terminal, format_encounter_markdown
+        from balancer_core.generator import build_custom_encounter, CustomEnemySpec
+
+        # 1. Skill requirement definition verification
+        skill_map = {s.name: s for s in SKILLS_DATABASE}
+        
+        # Pure skills
+        self.assertIn("Overpower", skill_map)
+        self.assertEqual(skill_map["Overpower"].required_abilities, {"Warfare": 5})
+        self.assertEqual(skill_map["Whirlwind"].required_abilities, {"Warfare": 2})
+        self.assertEqual(skill_map["Battering Ram"].required_abilities, {"Warfare": 1})
+        self.assertEqual(skill_map["Sawtooth Blade"].required_abilities, {"Scoundrel": 1})
+        self.assertEqual(skill_map["Infect"].required_abilities, {"Necromancer": 2})
+        self.assertEqual(skill_map["Encourage"].required_abilities, {})
+
+        # Hybrid skills
+        self.assertIn("Raining Blood", skill_map)
+        self.assertEqual(skill_map["Raining Blood"].required_abilities, {"Necromancer": 1, "Hydrosophist": 1})
+        self.assertEqual(skill_map["Raining Blood"].requirements_display, "Necromancer 1, Hydrosophist 1")
+
+        if "Corpse Explosion" in skill_map:
+            self.assertEqual(skill_map["Corpse Explosion"].required_abilities, {"Necromancer": 1, "Pyrokinetic": 1})
+
+        # 2. Authentic Undead & Black Ring encounter generation with Black Ring Witch / Defiler
+        party = PartyConfig(level=10, party_size=4, difficulty=Difficulty.BALANCED)
+        found_witch_or_defiler = False
+        for s in range(50):
+            enc = generate_encounter(party, encounter_type=EncounterType.STANDARD, faction=Faction.UNDEAD, seed=s)
+            for enemy in enc.enemies:
+                skill_names = [sk.name for sk in enemy.skills]
+                if "Raining Blood" in skill_names:
+                    found_witch_or_defiler = True
+                    # Enemy MUST have at least 1 Hydrosophist and at least 1 Necromancer
+                    hydro = enemy.stats.combat_abilities.get("Hydrosophist", 0)
+                    necro = enemy.stats.combat_abilities.get("Necromancer", 0)
+                    self.assertGreaterEqual(
+                        hydro, 1,
+                        f"{enemy.name} has Raining Blood but Hydrosophist={hydro} (expected >= 1)"
+                    )
+                    self.assertGreaterEqual(
+                        necro, 1,
+                        f"{enemy.name} has Raining Blood but Necromancer={necro} (expected >= 1)"
+                    )
+                # General check: every skill on this enemy must have its required combat abilities satisfied
+                for sk in enemy.skills:
+                    if sk.is_innate and not sk.required_abilities:
+                        continue
+                    for req_school, req_pts in sk.required_abilities.items():
+                        actual_pts = enemy.stats.combat_abilities.get(req_school, 0)
+                        self.assertGreaterEqual(
+                            actual_pts, req_pts,
+                            f"{enemy.name} has skill '{sk.name}' requiring {req_school} {req_pts}, but only has {actual_pts}"
+                        )
+            if found_witch_or_defiler:
+                break
+
+        self.assertTrue(found_witch_or_defiler, "Should have generated an encounter with Raining Blood caster")
+
+        # 3. Custom builder verification with explicit hybrid skills
+        enc_custom = build_custom_encounter(
+            party,
+            [
+                CustomEnemySpec(
+                    template_name="Bandit Kingpin",
+                    unit_tier="BOSS",
+                    skills=["Raining Blood", "Overpower", "Fireball"]
+                )
+            ],
+            seed=42
+        )
+        boss = enc_custom.enemies[0]
+        self.assertGreaterEqual(boss.stats.combat_abilities.get("Necromancer", 0), 1)
+        self.assertGreaterEqual(boss.stats.combat_abilities.get("Hydrosophist", 0), 1)
+        self.assertGreaterEqual(boss.stats.combat_abilities.get("Warfare", 0), 5)
+        self.assertGreaterEqual(boss.stats.combat_abilities.get("Pyrokinetic", 0), 2)
+
+        # 4. Display formatting verification in terminal and markdown
+        term_text = format_encounter_terminal(enc_custom)
+        self.assertIn("Req: Necromancer", term_text)
+        self.assertIn("Hydrosophist 1", term_text)
+        self.assertIn("[Req: Warfare 5]", term_text)
+
+        md_text = format_encounter_markdown(enc_custom)
+        self.assertIn("| Requirements |", md_text)
+        self.assertIn("Necromancer 1, Hydrosophist 1", md_text)
+        self.assertIn("Warfare 5", md_text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,6 +106,7 @@ SKILLS_DATABASE: List[Skill] = [
     # === SCOUNDREL ===
     Skill("Adrenaline", "Scoundrel", "Novice", 0, "Utility", "Gain +2 AP immediately this turn; lose -2 AP next turn.", "Adrenaline"),
     Skill("Backlash", "Scoundrel", "Novice", 1, "Physical", "Teleport behind target and backstab them with daggers.", "Backstab"),
+    Skill("Sawtooth Blade", "Scoundrel", "Novice", 2, "Physical", "Slash target's throat, dealing piercing damage directly to Vitality and setting Bleeding.", "Bleeding", required_abilities={"Scoundrel": 1}),
     Skill("Throwing Knife", "Scoundrel", "Novice", 2, "Physical", "Hurl dagger at target at range, can backstab.", None),
     Skill("Chloroform", "Scoundrel", "Novice", 1, "Magic", "Destroys magic armor and puts target to sleep if stripped.", "Sleeping"),
     Skill("Cloak and Dagger", "Scoundrel", "Adept", 1, "Utility", "Teleport silently without breaking stealth or invisibility.", None),
@@ -160,11 +161,21 @@ SKILLS_DATABASE: List[Skill] = [
     Skill("Blood Sacrifice", "Necromancer", "Novice", 0, "Utility", "Lose a small amount of vitality to gain +1 AP and +10% damage bonus.", "Flesh Sacrifice"),
     Skill("Mosquito Swarm", "Necromancer", "Novice", 2, "Physical", "Summon blood-sucking insects that deal physical damage and heal caster.", "Bleeding"),
     Skill("Decaying Touch", "Necromancer", "Novice", 2, "Physical", "Touch that sets Decaying: all healing spells now deal direct piercing damage.", "Decaying"),
-    Skill("Raining Blood", "Necromancer", "Adept", 2, "Physical", "Rain blood across battlefield, setting Bleeding and leaving blood surfaces.", "Bleeding"),
+    Skill("Raining Blood", "Necromancer", "Adept", 2, "Physical", "Rain blood across battlefield, setting Bleeding and leaving blood surfaces.", "Bleeding", required_abilities={"Necromancer": 1, "Hydrosophist": 1}),
+    Skill("Infect", "Necromancer", "Adept", 3, "Physical", "Infect target with a deadly plague, dealing physical damage and setting Diseased. Spreads to nearby characters.", "Diseased", required_abilities={"Necromancer": 2}),
     Skill("Bone Cage", "Necromancer", "Adept", 1, "Utility", "Draw bone armor from corpses nearby to massively boost Physical Armor.", "Bone Armor"),
     Skill("Shackles of Pain", "Necromancer", "Adept", 3, "Utility", "Bind target: all damage received by caster is mirrored to the bound target.", "Shackled"),
     Skill("Living on the Edge", "Necromancer", "Expert", 3, "Utility", "Target cannot die or drop below 1 HP for 2 turns.", "Death Ward"),
     Skill("Grasp of the Starved", "Necromancer", "Expert", 2, "Physical", "Hands erupt from blood surfaces dealing huge physical damage and crippling foes.", "Crippled"),
+    Skill("Blood Storm", "Necromancer", "Master", 4, "Physical", "Rain blood and ice, dealing physical damage and setting Decaying and Diseased.", "Decaying", required_abilities={"Necromancer": 3, "Hydrosophist": 3}),
+
+    # === HYBRID / CRAFTED SKILLS ===
+    Skill("Corpse Explosion", "Necromancer", "Novice", 1, "Physical", "Detonate a corpse dealing massive physical damage to surrounding characters.", None, required_abilities={"Necromancer": 1, "Pyrokinetic": 1}),
+    Skill("Cleanse Wounds", "Hydrosophist", "Novice", 2, "Healing", "Heal target, remove Necrofire, Burning, Diseased, Decaying, Poisoned, and Bleeding.", "Cleanse Wounds", required_abilities={"Hydrosophist": 1, "Warfare": 1}),
+    Skill("Throw Dust", "Geomancer", "Novice", 2, "Earth", "Throw dust in target's face, dealing earth damage and setting Blind.", "Blind", required_abilities={"Geomancer": 1, "Huntsman": 1}),
+    Skill("Sparking Swings", "Warfare", "Novice", 1, "Buff", "Melee attacks cause fiery sparks that bounce to nearby enemies.", "Sparking Swings", required_abilities={"Warfare": 1, "Pyrokinetic": 1}),
+    Skill("Vampiric Hunger", "Scoundrel", "Novice", 1, "Buff", "Grants 50% life steal on damage dealt for 2 turns.", "Vampiric Hunger", required_abilities={"Scoundrel": 1, "Hydrosophist": 1}),
+    Skill("Venom Coating", "Geomancer", "Novice", 1, "Buff", "Adds poison damage to all weapon and skill attacks for 2 turns.", "Venom Coating", required_abilities={"Geomancer": 1, "Scoundrel": 1}),
 
     # === POLYMORPH ===
     Skill("Bull Horns", "Polymorph", "Novice", 1, "Physical", "Grow horns allowing Bull Rush charge attack each turn for 1 AP.", None),
@@ -204,7 +215,7 @@ def is_skill_compatible_with_equipment(skill: Skill, equipment: Optional[str]) -
             return False
 
     # Dagger requirement
-    dagger_skills = {"Backlash", "Throwing Knife", "Corrupted Blade", "Fan of Knives", "Mortal Blow"}
+    dagger_skills = {"Backlash", "Throwing Knife", "Corrupted Blade", "Fan of Knives", "Mortal Blow", "Sawtooth Blade"}
     if skill.name in dagger_skills:
         has_dagger = any(w in eq_lower for w in ["dagger", "daggers", "shiv", "shivs", "blade", "blades", "kris"])
         if not has_dagger:
@@ -340,16 +351,54 @@ def get_skills_for_archetype(
     # Prioritize schools the NPC explicitly specializes in via tactics/signature skills
     present_schools: List[str] = []
     for s in tactics_candidates:
-        if s.school not in present_schools and s.school != "Special":
+        for sch in s.required_abilities.keys():
+            if sch not in present_schools and sch not in ("Special", "Racial"):
+                present_schools.append(sch)
+        if s.school not in present_schools and s.school not in ("Special", "Racial"):
             present_schools.append(s.school)
-    
-    active_prefs = present_schools + [sch for sch in prefs if sch not in present_schools]
+
+    effective_role = class_archetype if (archetype in (Archetype.BOSS, Archetype.MINION) and class_archetype) else archetype
+    is_elemental_caster = effective_role in (Archetype.MAGE, Archetype.BATTLEMAGE, Archetype.CLERIC, Archetype.SUMMONER) or (
+        archetype == Archetype.BOSS and not class_archetype
+    )
+
+    tactics_text = ((ai_tactics or "") + " " + (equipment or "")).lower()
+    tactics_no_racial = tactics_text.replace("dragon's blaze", "").replace("dragons blaze", "")
+    is_water_themed = ("Hydrosophist" in present_schools) or any(
+        k in tactics_text for k in ["water", "frost", "ice", "cryo", "brine", "glacial", "blizzard"]
+    )
+    is_fire_themed = ("Pyrokinetic" in present_schools) or any(
+        k in tactics_no_racial for k in ["fire", "pyro", "flame", "magma", "molten", "blaze", "scorch"]
+    )
+
+    if is_elemental_caster and is_water_themed and not is_fire_themed:
+        # Water/Ice casters naturally pair Hydrosophist with Aerotheurge; exclude opposing Pyrokinetic fire spells
+        if "Hydrosophist" not in present_schools:
+            present_schools.insert(0, "Hydrosophist")
+        if "Aerotheurge" not in present_schools:
+            present_schools.append("Aerotheurge")
+        active_prefs = [sch for sch in present_schools if sch != "Pyrokinetic"]
+        active_prefs += [sch for sch in prefs if sch not in active_prefs and sch != "Pyrokinetic"]
+    elif is_elemental_caster and is_fire_themed and not is_water_themed:
+        # Fire casters naturally pair Pyrokinetic with Geomancer; exclude opposing Hydrosophist frost spells
+        if "Pyrokinetic" not in present_schools:
+            present_schools.insert(0, "Pyrokinetic")
+        if "Geomancer" not in present_schools:
+            present_schools.append("Geomancer")
+        active_prefs = [sch for sch in present_schools if sch != "Hydrosophist"]
+        active_prefs += [sch for sch in prefs if sch not in active_prefs and sch != "Hydrosophist"]
+    else:
+        active_prefs = present_schools + [sch for sch in prefs if sch not in present_schools]
 
     # Candidate skills ordered by active school preferences, filtered by equipment and tier
     candidate_skills: List[Skill] = []
     for school in active_prefs:
         for s in SKILLS_DATABASE:
             if s.school == school and s.tier != "Racial" and s.tier in allowed_tiers:
+                if is_elemental_caster and is_water_themed and not is_fire_themed and (s.school == "Pyrokinetic" or s.damage_type == "Fire"):
+                    continue
+                if is_elemental_caster and is_fire_themed and not is_water_themed and (s.school == "Hydrosophist" or s.damage_type == "Water"):
+                    continue
                 if is_skill_compatible_with_equipment(s, equipment) and s not in candidate_skills:
                     candidate_skills.append(s)
 
@@ -362,6 +411,10 @@ def get_skills_for_archetype(
             continue
         if len(memorized_selected) >= max_slots:
             break
+        if is_elemental_caster and is_water_themed and not is_fire_themed and (s.school == "Pyrokinetic" or s.damage_type == "Fire"):
+            continue
+        if is_elemental_caster and is_fire_themed and not is_water_themed and (s.school == "Hydrosophist" or s.damage_type == "Water"):
+            continue
         # Tier check: allow if tier is unlocked or for bosses (level 3+)
         tier_ok = (s.tier in allowed_tiers) or (archetype == Archetype.BOSS and level >= 3)
         if tier_ok and is_skill_compatible_with_equipment(s, equipment):

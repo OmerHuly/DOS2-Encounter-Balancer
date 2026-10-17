@@ -215,26 +215,80 @@ def align_combat_abilities_with_skills(
     difficulty: Optional[Difficulty] = None,
     class_archetype: Optional[Archetype] = None
 ) -> None:
-    """Ensure combat abilities support the schools of the character's memorized skills."""
-    active_schools = [s.school for s in skills if s.school not in ("Special", "Racial")]
-    if not active_schools:
-        return
-    unique_schools = list(dict.fromkeys(active_schools))
-    magic_schools = {
+    """Ensure combat abilities support the requirements of all the character's memorized skills."""
+    SKILL_SCHOOLS = {
         "Warfare", "Huntsman", "Scoundrel", "Pyrokinetic", "Hydrosophist",
         "Aerotheurge", "Geomancer", "Necromancer", "Polymorph", "Summoning"
     }
-    total_pts = sum(v for k, v in stats.combat_abilities.items() if k in magic_schools)
-    if total_pts <= 0:
+
+    # 1. Determine minimum required ability points for every school across all memorized skills
+    min_requirements: Dict[str, int] = {}
+    for s in skills:
+        if s.is_innate and not s.required_abilities:
+            continue
+        for school, req_pts in s.required_abilities.items():
+            if school in SKILL_SCHOOLS:
+                min_requirements[school] = max(min_requirements.get(school, 0), req_pts)
+
+    if not min_requirements:
         return
-    current_assigned = {k: v for k, v in stats.combat_abilities.items() if k in magic_schools and v > 0}
-    needs_realign = any(stats.combat_abilities.get(s, 0) == 0 for s in unique_schools) or any(s not in unique_schools for s in current_assigned)
+
+    # Total points currently in skill schools vs minimum needed points
+    current_skill_pts = sum(v for k, v in stats.combat_abilities.items() if k in SKILL_SCHOOLS)
+    needed_min_pts = sum(min_requirements.values())
+    total_pts = max(current_skill_pts, needed_min_pts)
+
+    # Check if realignment is needed:
+    # - Any required ability is below minimum requirement
+    # - Or points are invested in a skill school that has zero skills memorized
+    needs_realign = (
+        any(stats.combat_abilities.get(school, 0) < req for school, req in min_requirements.items())
+        or any(k in stats.combat_abilities and stats.combat_abilities[k] > 0 and k not in min_requirements for k in SKILL_SCHOOLS)
+    )
+
     if needs_realign:
-        new_abilities = {k: v for k, v in stats.combat_abilities.items() if k not in magic_schools}
-        base_per_school = max(1, total_pts // len(unique_schools))
-        remainder = total_pts - (base_per_school * len(unique_schools))
-        for i, school in enumerate(unique_schools):
-            pts = base_per_school + (remainder if i == 0 else 0)
+        # Preserve non-skill abilities (e.g. Single-Handed, Two-Handed, Dual Wielding, Ranged, Perseverance, Retribution, Leadership)
+        new_abilities = {k: v for k, v in stats.combat_abilities.items() if k not in SKILL_SCHOOLS}
+
+        # Start each required school at its minimum
+        allocated = dict(min_requirements)
+        surplus = total_pts - sum(allocated.values())
+
+        if surplus > 0:
+            # Rank schools by number of skills memorized to prioritize the character's primary school
+            school_counts: Dict[str, int] = {}
+            for sch in min_requirements:
+                cnt = sum(1 for s in skills if (sch in s.required_abilities or s.school == sch))
+                school_counts[sch] = cnt
+
+            sorted_schools = sorted(
+                min_requirements.keys(),
+                key=lambda sch: (school_counts.get(sch, 0), min_requirements[sch]),
+                reverse=True
+            )
+
+            # Distribute surplus points weighted towards the primary school
+            while surplus > 0:
+                progress = False
+                for sch in sorted_schools:
+                    if surplus <= 0:
+                        break
+                    if allocated[sch] < 10:
+                        allocated[sch] += 1
+                        surplus -= 1
+                        progress = True
+                        # If primary school has higher weight, give it extra surplus share if possible
+                        if (
+                            school_counts.get(sch, 0) > school_counts.get(sorted_schools[-1], 0)
+                            and surplus > 0
+                            and allocated[sch] < 10
+                        ):
+                            allocated[sch] += 1
+                            surplus -= 1
+                if not progress:
+                    break
+
+        for school, pts in allocated.items():
             new_abilities[school] = min(10, pts)
         stats.combat_abilities = new_abilities
 
@@ -248,6 +302,12 @@ def align_combat_abilities_with_skills(
             difficulty=difficulty or Difficulty.BALANCED,
             class_archetype=class_archetype
         )
+
+    # Ensure memory attribute accommodates all memorized skills
+    used_mem = sum(s.memory_cost for s in skills)
+    needed_mem = 10 + max(0, used_mem - 3)
+    if stats.memory < needed_mem:
+        stats.memory = needed_mem
 
 
 @dataclass
@@ -730,6 +790,14 @@ def _create_npc(
             class_archetype=class_style
         )
     
+    if explicit_skills is None:
+        calc_max = 3 + max(0, stats.memory - 10)
+        final_slots = min(max_slots, calc_max) if max_slots is not None else calc_max
+        innates = [s for s in skills if s.is_innate]
+        memorized = [s for s in skills if not s.is_innate]
+        if len(memorized) > final_slots:
+            skills = innates + memorized[:final_slots]
+
     align_combat_abilities_with_skills(
         stats,
         skills,
@@ -739,14 +807,6 @@ def _create_npc(
         difficulty=party_config.difficulty,
         class_archetype=class_style
     )
-
-    if explicit_skills is None:
-        calc_max = 3 + max(0, stats.memory - 10)
-        final_slots = min(max_slots, calc_max) if max_slots is not None else calc_max
-        innates = [s for s in skills if s.is_innate]
-        memorized = [s for s in skills if not s.is_innate]
-        if len(memorized) > final_slots:
-            skills = innates + memorized[:final_slots]
 
     if ap_recovery is not None:
         stats.ap_recovery = ap_recovery
@@ -816,17 +876,29 @@ def _create_npc(
     # Asymmetric Armor & Elemental Weakness Profiles (Point 3)
     defense_theme = ""
     gm_notes = template.gm_notes
-    if actual_archetype == Archetype.BOSS or "Champion" in title or "Elite" in name_prefix or defense_profile_name is not None:
-        prof_key = defense_profile_name if (defense_profile_name and defense_profile_name.lower() != "auto") else auto_detect_defense_profile(template, actual_archetype)
+    has_explicit_prof = (defense_profile_name is not None and defense_profile_name.lower() != "auto")
+    auto_prof = auto_detect_defense_profile(template, actual_archetype)
+    is_inherent_elemental = auto_prof in ("troll", "venom", "pyro", "cryo", "storm")
+    should_apply_defense = (
+        actual_archetype == Archetype.BOSS
+        or "Champion" in title
+        or "Elite" in name_prefix
+        or has_explicit_prof
+        or is_inherent_elemental
+    )
+    if should_apply_defense:
+        prof_key = defense_profile_name if has_explicit_prof else auto_prof
         def_prof = DEFENSE_PROFILES.get(prof_key.lower(), DEFENSE_PROFILES["balanced"])
-        if def_prof.phys_armor_mult != 1.0 or def_prof.magic_armor_mult != 1.0:
-            total_armor = stats.physical_armor + stats.magic_armor
-            raw_phys = stats.physical_armor * def_prof.phys_armor_mult
-            raw_mag = stats.magic_armor * def_prof.magic_armor_mult
-            sum_raw = raw_phys + raw_mag
-            if sum_raw > 0 and total_armor > 0:
-                stats.physical_armor = max(0, int(round(total_armor * (raw_phys / sum_raw))))
+        total_armor = stats.physical_armor + stats.magic_armor
+        if total_armor > 0:
+            if def_prof.name == "balanced":
+                stats.physical_armor = int(round(total_armor * 0.5))
                 stats.magic_armor = max(0, total_armor - stats.physical_armor)
+            elif def_prof.phys_armor_mult != 1.0 or def_prof.magic_armor_mult != 1.0:
+                sum_mult = def_prof.phys_armor_mult + def_prof.magic_armor_mult
+                if sum_mult > 0:
+                    stats.physical_armor = max(0, int(round(total_armor * (def_prof.phys_armor_mult / sum_mult))))
+                    stats.magic_armor = max(0, total_armor - stats.physical_armor)
         stats.resistances = dict(def_prof.resistances)
         defense_theme = def_prof.display_name
         if def_prof.vulnerability_notes and def_prof.name != "balanced":
@@ -939,7 +1011,7 @@ def generate_encounter(
             candidates = unrepresented if unrepresented else matching
             template = random.choice(candidates) if candidates else random.choice(templates)
             
-            enemies.append(_create_npc(template, party_lvl, party_config, title="Combatant"))
+            enemies.append(_create_npc(template, party_lvl, party_config, title="Combatant", defense_profile_name=defense_profile))
 
     elif encounter_type == EncounterType.BOSS:
         # Resolve Boss Template (specifically selected or randomized)
@@ -1022,6 +1094,7 @@ def generate_encounter(
                 max_slots=scaling.minion_max_slots,
                 armor_multiplier=scaling.minion_armor_mult,
                 vitality_multiplier=scaling.minion_vitality_mult,
+                defense_profile_name=defense_profile,
                 ap_recovery=scaling.minion_ap_recovery,
             ))
 
@@ -1044,7 +1117,8 @@ def generate_encounter(
                 party_config, 
                 title="Swarmer", 
                 archetype=Archetype.MINION, 
-                max_slots=2
+                max_slots=2,
+                defense_profile_name=defense_profile,
             ))
 
     elif encounter_type == EncounterType.ELITE:
@@ -1489,7 +1563,7 @@ def build_custom_encounter(
                 max_slots=2,
                 armor_multiplier=boss_scaling.minion_armor_mult if effective_encounter_type == EncounterType.BOSS else 1.0,
                 vitality_multiplier=boss_scaling.minion_vitality_mult if effective_encounter_type == EncounterType.BOSS else 1.0,
-                defense_profile_name=spec.defense_profile if spec.defense_profile != "auto" else None,
+                defense_profile_name=spec.defense_profile,
                 ap_recovery=4,
                 explicit_skills=spec.skills,
             )
@@ -1516,7 +1590,7 @@ def build_custom_encounter(
                 max_slots=norm_slots,
                 armor_multiplier=norm_arm,
                 vitality_multiplier=norm_vit,
-                defense_profile_name=spec.defense_profile if spec.defense_profile != "auto" else None,
+                defense_profile_name=spec.defense_profile,
                 ap_recovery=norm_ap,
                 explicit_skills=spec.skills,
             )

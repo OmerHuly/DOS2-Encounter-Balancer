@@ -987,7 +987,8 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Glacial Water Staff + Cloth Robes",
         ai_tactics="Casts Rain to make party Wet, then freezes with Hail Strike or Winter Blast. Clears CC with Armor of Frost.",
         gm_notes="Specialized water/ice control caster.",
-        can_be_minion=False
+        can_be_minion=False,
+        signature_skills=["Rain", "Hail Strike", "Winter Blast", "Armor of Frost", "Restoration", "Ice Fan", "Global Cooling"]
     ),
     BestiaryTemplate(
         name="Magister Pyromancer",
@@ -1789,7 +1790,8 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Volatile Magma Gel",
         ai_tactics="Hurls fiery globules from range, ignites surfaces on contact, and heals from fire damage.",
         gm_notes="Official GM Mode Fire Ooze.",
-        can_be_minion=True
+        can_be_minion=True,
+        signature_skills=["Ignition", "Searing Daggers", "Fireball", "Peace of Mind", "Spontaneous Combustion", "Laser Ray", "Supernova"]
     ),
     BestiaryTemplate(
         name="Poison Ooze",
@@ -1809,9 +1811,19 @@ BESTIARY: List[BestiaryTemplate] = [
         race=Race.CREATURE,
         archetype=Archetype.MAGE,
         equipment="Frigid Brine Gel",
-        ai_tactics="Drenches targets and freezes them with Winter Blast and Ice Fan.",
+        ai_tactics="Drenches targets with Rain and freezes them with Winter Blast and Ice Fan. Cleanses and fortifies with Armor of Frost and Restoration.",
         gm_notes="Official GM Mode Water Ooze.",
-        can_be_minion=True
+        can_be_minion=True,
+        signature_skills=[
+            "Rain",
+            "Hail Strike",
+            "Winter Blast",
+            "Armor of Frost",
+            "Restoration",
+            "Ice Fan",
+            "Global Cooling",
+            "Hail Storm",
+        ]
     ),
     BestiaryTemplate(
         name="Flesh Blood Ooze",
@@ -1833,7 +1845,8 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Blazing Core",
         ai_tactics="Immune to and healed by Fire. Casts Fireball, Supernova, and ignites all surrounding surfaces.",
         gm_notes="Living embodiment of flame.",
-        can_be_boss=False
+        can_be_boss=False,
+        signature_skills=["Fireball", "Supernova", "Ignition", "Laser Ray", "Epidemic of Fire", "Searing Daggers"]
     ),
 
     # --- Vegetal / Shambling Mounds (Plant Monsters) ---
@@ -1949,7 +1962,8 @@ BESTIARY: List[BestiaryTemplate] = [
         equipment="Rime-Forged Glacial Talons",
         ai_tactics="Immune to Water and Freezing; chills enemies on contact and casts Winter Blast and Ice Fan.",
         gm_notes="Official GM Mode Elemental Ice Devil (GM_Ice_Demon).",
-        can_be_minion=False
+        can_be_minion=False,
+        signature_skills=["Winter Blast", "Ice Fan", "Hail Strike", "Global Cooling", "Rain", "Hail Storm"]
     ),
     BestiaryTemplate(
         name="Blood Demon Harvester",

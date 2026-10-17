@@ -261,6 +261,8 @@ def get_gui_metadata() -> Dict[str, Any]:
             "status_applied": s.status_applied,
             "memory_cost": s.memory_cost,
             "is_innate": s.is_innate,
+            "required_abilities": s.required_abilities,
+            "requirements_display": s.requirements_display,
         }
         for s in SKILLS_DATABASE
     ]
@@ -373,6 +375,8 @@ def serialize_npc(npc: NPC, index: int, party_level: Optional[int] = None) -> Di
                 "status_applied": s.status_applied,
                 "memory_cost": s.memory_cost,
                 "is_innate": s.is_innate,
+                "required_abilities": s.required_abilities,
+                "requirements_display": s.requirements_display,
             }
             for s in npc.skills
         ],
@@ -1298,6 +1302,12 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     background: rgba(201, 54, 54, 0.2);
     border: 1px solid #a83232;
     color: #ffadad;
+  }
+
+  .skill-badge.req {
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: #7dd3fc;
   }
 
   .skill-ap {
@@ -2430,7 +2440,8 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       const opts = skillsInSchool.map(s => {
         const has = currentSet.has(s.name.toLowerCase());
         const disabled = has ? 'disabled' : '';
-        const tag = has ? ' (Learned)' : ` (${s.ap_cost} AP)`;
+        const reqStr = (s.requirements_display && s.requirements_display !== 'None') ? ` - Req: ${s.requirements_display}` : '';
+        const tag = has ? ' (Learned)' : ` (${s.ap_cost} AP${reqStr})`;
         return `<option value="${escapeHtml(s.name)}" ${disabled}>${escapeHtml(s.name)}${tag}</option>`;
       }).join('');
       optgroups += `<optgroup label="${escapeHtml(school)}">${opts}</optgroup>`;
@@ -2537,12 +2548,6 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
     const p = enc.party_config;
     const a = enc.analysis;
 
-    // Calculate max stat across all enemies for proportional visual bars
-    let maxBarVal = 100;
-    enc.enemies.forEach(e => {
-      maxBarVal = Math.max(maxBarVal, e.stats.vitality, e.stats.physical_armor, e.stats.magic_armor);
-    });
-
     const raceBadge = enc.selected_race
       ? `<span class="tag tag-gold">Race: ${escapeHtml(enc.selected_race)}</span>`
       : '';
@@ -2558,9 +2563,10 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
 
     const enemyCardsHtml = enc.enemies.map((e, arrIdx) => {
       const isBoss = e.archetype_key === 'BOSS';
-      const physPct = Math.min(100, Math.round((e.stats.physical_armor / maxBarVal) * 100));
-      const magPct  = Math.min(100, Math.round((e.stats.magic_armor / maxBarVal) * 100));
-      const vitPct  = Math.min(100, Math.round((e.stats.vitality / maxBarVal) * 100));
+      const cardTotal = (e.stats.physical_armor + e.stats.magic_armor + e.stats.vitality) || 1;
+      const physPct = Math.min(100, Math.max(0, Math.round((e.stats.physical_armor / cardTotal) * 100)));
+      const magPct  = Math.min(100, Math.max(0, Math.round((e.stats.magic_armor / cardTotal) * 100)));
+      const vitPct  = Math.min(100, Math.max(0, Math.round((e.stats.vitality / cardTotal) * 100)));
 
       const abilitiesPills = Object.entries(e.stats.combat_abilities)
         .map(([k, v]) => `<span class="mini-pill">${escapeHtml(k)} ${v}</span>`)
@@ -2588,14 +2594,18 @@ HTML_DASHBOARD = r"""<!DOCTYPE html>
       const skillsHtml = e.skills.map(s => {
         const innateTag = s.is_innate ? `<span class="skill-badge innate">Innate</span>` : '';
         const statusTag = s.status_applied ? `<span class="skill-badge status">${escapeHtml(s.status_applied)}</span>` : '';
+        const reqTag = (!s.is_innate && s.requirements_display && s.requirements_display !== 'None')
+          ? `<span class="skill-badge req" title="Required Combat Abilities: ${escapeHtml(s.requirements_display)}">${escapeHtml(s.requirements_display)}</span>`
+          : '';
         const removeBtn = (ACTIVE_MODE === 'builder')
           ? `<button type="button" class="btn-skill-remove" onclick="removeBuilderUnitSkill(${arrIdx}, '${escapeJsStr(s.name)}')" title="Remove skill ${escapeHtml(s.name)}">&#x2715;</button>`
           : '';
         return `
-          <div class="skill-item" title="${escapeHtml(s.description)}">
+          <div class="skill-item" title="${escapeHtml(s.description)} (Req: ${escapeHtml(s.requirements_display || 'None')})">
             <div class="skill-left">
               <span class="skill-name">${escapeHtml(s.name)}</span>
               <span class="skill-school">(${escapeHtml(s.school)} &bull; ${escapeHtml(s.damage_type)})</span>
+              ${reqTag}
               ${innateTag}
               ${statusTag}
             </div>

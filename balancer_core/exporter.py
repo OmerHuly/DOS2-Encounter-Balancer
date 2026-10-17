@@ -97,7 +97,8 @@ def format_enemy_terminal_card(npc: NPC, index: int) -> str:
     for s in npc.skills:
         cc_tag = f" [{s.status_applied}]" if s.status_applied else ""
         innate_tag = " [Innate]" if s.is_innate else ""
-        skill_str = f"   * {s.name} ({s.school}, {s.ap_cost} AP, {s.damage_type}){innate_tag}{cc_tag}"
+        req_tag = f" [Req: {s.requirements_display}]" if (not s.is_innate and s.required_abilities) else ""
+        skill_str = f"   * {s.name} ({s.school}, {s.ap_cost} AP, {s.damage_type}){req_tag}{innate_tag}{cc_tag}"
         if len(skill_str) <= 68:
             lines.append(f"|{skill_str:<70}|")
         else:
@@ -266,14 +267,14 @@ def format_encounter_markdown(encounter: Encounter) -> str:
             content.append(f"- **Defensive Profile:** {npc.defense_theme}")
         content.append("")
 
-        # Skills (Innate & Memorized)
         content.append(f"**Skills (Memory Slots Used: {npc.used_memory_slots}/{npc.max_memory_slots}):**")
-        content.append("| Skill | School | AP | Type | Memory | Effect / Description |")
-        content.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+        content.append("| Skill | School | AP | Type | Memory | Requirements | Effect / Description |")
+        content.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
         for s in npc.skills:
             status_text = f"**[{s.status_applied}]** " if s.status_applied else ""
             mem_text = "0 (Innate)" if s.is_innate else f"{s.memory_cost}"
-            content.append(f"| `{s.name}` | {s.school} ({s.tier}) | {s.ap_cost} AP | {s.damage_type} | {mem_text} | {status_text}{s.description} |")
+            req_text = s.requirements_display if not s.is_innate else "Innate"
+            content.append(f"| `{s.name}` | {s.school} ({s.tier}) | {s.ap_cost} AP | {s.damage_type} | {mem_text} | {req_text} | {status_text}{s.description} |")
         content.append("")
 
         # GM Tactics
